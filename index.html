@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>모기 잡기 3D</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+
+  <section id="screen-start" class="screen active">
+    <h1>모기 잡기 3D</h1>
+    <p>날아다니는 모기를 파리채로 잡고,<br>어떻게 처치할지 골라 보세요.</p>
+    <button id="btn-start" type="button">시작</button>
+  </section>
+
+  <section id="screen-stage1" class="screen">
+    <p class="hint">모기를 클릭해서 잡으세요!</p>
+  </section>
+
+  <section id="screen-stage2" class="screen">
+    <p class="hint">잡았다! 처치 방법을 고르세요.</p>
+  </section>
+
+  <section id="screen-result" class="screen">
+    <h1>결과</h1>
+    <p>잡는 데 걸린 시간: <strong id="result-time">-</strong></p>
+    <p>처치 방법: <strong id="result-method">-</strong></p>
+    <button id="btn-retry" type="button">다시하기</button>
+  </section>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
