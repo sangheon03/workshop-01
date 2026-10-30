@@ -2,8 +2,30 @@ import * as THREE from 'three';
 
 const DURATION = 3000;
 const SMOKE_COUNT = 14;
-const LENS_Z = 2.2;
-const LENS_RADIUS = 1.1;
+// 렌즈는 모기 위쪽 상단에 떠 있고, 거기서 모기로 빛이 모인다.
+const LENS_OFFSET = new THREE.Vector3(0, 2.0, 1.0);
+const LENS_RADIUS = 1.0;
+const HEAT = new THREE.Color(0xff4a10);
+
+// 렌즈에서 모기까지 점점 좁아지는 빛줄기 (위가 넓고 아래가 뾰족하다).
+function makeBeam(lensPos, target) {
+  const dir = lensPos.clone().sub(target);
+  const length = dir.length();
+  const beam = new THREE.Mesh(
+    new THREE.CylinderGeometry(LENS_RADIUS * 0.85, 0.03, length, 24, 1, true),
+    new THREE.MeshBasicMaterial({
+      color: 0xfff2b0,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    }),
+  );
+  beam.position.copy(target).addScaledVector(dir, 0.5);
+  beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+  return beam;
+}
 
 function makeLens() {
   const lens = new THREE.Group();
@@ -58,22 +80,24 @@ export function playMagnify(mosquito) {
   const black = new THREE.Color(0x000000);
 
   const lens = makeLens();
-  lens.position.copy(center).add(new THREE.Vector3(0, 0.6, LENS_Z));
+  lens.position.copy(center).add(LENS_OFFSET);
   lens.scale.setScalar(0.01);
 
-  // 빛이 모이는 점: 모기 위의 밝은 광원과 작은 구.
-  const glow = new THREE.PointLight(0xfff2b0, 0, 12);
-  glow.position.copy(center).add(new THREE.Vector3(0, 0, 0.8));
+  const beam = makeBeam(lens.position, center);
+
+  // 빛이 모이는 점: 모기 바로 앞의 광원과 작은 구 (모기가 가려지지 않도록 작게).
+  const glow = new THREE.PointLight(0xfff2b0, 0, 8);
+  glow.position.copy(center).add(new THREE.Vector3(0, 0.4, 0.8));
   const spot = new THREE.Mesh(
-    new THREE.SphereGeometry(0.2, 12, 12),
+    new THREE.SphereGeometry(0.08, 12, 12),
     new THREE.MeshBasicMaterial({ color: 0xfff2b0, transparent: true, opacity: 0 }),
   );
-  spot.position.copy(glow.position);
+  spot.position.copy(center).add(new THREE.Vector3(0, 0.05, 0.3));
 
   const smoke = makeSmoke();
   smoke.forEach((p) => p.position.copy(center));
 
-  world.add(lens, glow, spot, ...smoke);
+  world.add(lens, beam, glow, spot, ...smoke);
 
   return new Promise((resolve) => {
     const start = performance.now();
@@ -84,12 +108,17 @@ export function playMagnify(mosquito) {
       // 0~0.25: 렌즈가 나타난다 / 0.25~0.7: 빛이 모여 모기가 탄다 / 0.7~1: 연기와 함께 사라진다.
       lens.scale.setScalar(Math.min(t / 0.25, 1) * 0.99 + 0.01);
       const focus = THREE.MathUtils.clamp((t - 0.25) / 0.45, 0, 1);
-      glow.intensity = focus * 14;
-      spot.material.opacity = focus;
-      spot.scale.setScalar(1 + focus * 1.5);
-      meshes.forEach((m, i) => m.material.color.lerpColors(startColors[i], black, focus));
-
       const burn = THREE.MathUtils.clamp((t - 0.7) / 0.3, 0, 1);
+      glow.intensity = focus * 10 * (1 - burn);
+      beam.material.opacity = focus * 0.35 * (1 - burn);
+      spot.material.opacity = focus * (1 - burn);
+      spot.scale.setScalar(1 + focus * 1.5);
+      // 빛이 모이면 모기가 먼저 붉게 달아오르고, 곧 까맣게 탄다.
+      meshes.forEach((m, i) => {
+        m.material.color.lerpColors(startColors[i], black, focus);
+        m.material.emissive?.copy(HEAT).multiplyScalar(Math.sin(focus * Math.PI) * 0.9);
+      });
+
       group.scale.copy(startScale).multiplyScalar(1 - burn);
       lens.scale.setScalar((1 - burn) * (Math.min(t / 0.25, 1) * 0.99 + 0.01));
 
@@ -113,8 +142,8 @@ export function playMagnify(mosquito) {
 
       group.visible = false;
       group.scale.copy(startScale);
-      world.remove(lens, glow, spot, ...smoke);
-      [lens, spot, ...smoke].forEach((obj) =>
+      world.remove(lens, beam, glow, spot, ...smoke);
+      [lens, beam, spot, ...smoke].forEach((obj) =>
         obj.traverse((o) => {
           o.geometry?.dispose();
           o.material?.dispose();
