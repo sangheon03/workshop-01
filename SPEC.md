@@ -86,7 +86,7 @@
 - `stopStage1()` : 비행과 입력을 멈춘다 (모기는 장면에 남겨 둔다).
 
 ### 파리채 — `src/swatter.js` (fernwehs)
-- `enableSwatter()` / `disableSwatter()` : 파리채 커서를 켜고 끈다. `stage1.js`가 호출한다.
+- `enableSwatter({ mosquito, onCaught })` / `disableSwatter()` : 파리채 커서를 켜고 끈다. `stage1.js`가 호출한다. `mosquito`와 `onCaught`는 선택 인자이고, 주면 클릭 판정도 한다 (PR #20에서 확인, Leader 승인).
 
 ### 2단계 — `src/stage2.js` (jooyeonpark822)
 - `startStage2(mosquito, { onDone })` : 모기를 가운데로 옮기고 처치 버튼(2개, 돋보기화형이 만들어지면 3개)을 보여준다. 연출이 끝나면 `onDone(methodId)`를 호출한다.
