@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { playElectric } from './kills/electric.js';
 import { playPluck } from './kills/pluck.js';
+import { playMagnify } from './kills/magnify.js';
 
 const METHODS = [
   { id: 'electric', label: '전기충격', play: playElectric },
   { id: 'pluck', label: '신체뜯기', play: playPluck },
+  { id: 'magnify', label: '돋보기화형', play: playMagnify },
 ];
 
 let frameId = null;
