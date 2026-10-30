@@ -41,6 +41,10 @@ export function playElectric(mosquito) {
   group.traverse((obj) => {
     if (obj.isMesh) meshes.push(obj);
   });
+  // 재질은 모기마다 공유되므로 복제해서 쓴다. 안 그러면 다음 판 모기도 까맣게 나온다.
+  meshes.forEach((m) => {
+    m.material = m.material.clone();
+  });
   const startColors = meshes.map((m) => m.material.color.clone());
   const black = new THREE.Color(0x000000);
 
