@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { getScene } from './scene.js';
 import { createMosquito } from './mosquito.js';
+import { enableSwatter, disableSwatter } from './swatter.js';
 
 const SPEED = 3;
 const TURN_RATE = 6;
@@ -68,9 +69,18 @@ export function startStage1({ onCaught }) {
 
   lastTime = performance.now();
   frameId = requestAnimationFrame(tick);
+
+  enableSwatter({
+    mosquito,
+    onCaught: (caught) => {
+      stopStage1();
+      onCaught?.(caught);
+    },
+  });
 }
 
 export function stopStage1() {
   if (frameId !== null) cancelAnimationFrame(frameId);
   frameId = null;
+  disableSwatter();
 }
