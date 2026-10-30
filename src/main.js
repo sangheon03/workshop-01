@@ -1,3 +1,7 @@
+import { startStage1, stopStage1 } from './stage1.js';
+import { startStage2 } from './stage2.js';
+import { showResult } from './result.js';
+
 const SCREEN_NAMES = ['start', 'stage1', 'stage2', 'result'];
 
 export function showScreen(name) {
@@ -10,17 +14,32 @@ export function showScreen(name) {
   }
 }
 
-// 지금 장면에 있는 모기. 1단계에서 잡힌 모기를 이 변수에 담는다 (이슈 #9에서 연결).
+// 지금 장면에 있는 모기. 1단계에서 잡힌 모기를 이 변수에 담는다.
 let currentMosquito = null;
 
 export function resetGame() {
+  stopStage1();
   currentMosquito?.group?.parent?.remove(currentMosquito.group);
   currentMosquito = null;
   showScreen('start');
 }
 
-document.getElementById('btn-start').addEventListener('click', () => {
+function startGame() {
+  const startedAt = performance.now();
   showScreen('stage1');
-});
+  startStage1({
+    onCaught: (mosquito) => {
+      const seconds = (performance.now() - startedAt) / 1000;
+      currentMosquito = mosquito;
+      stopStage1();
+      showScreen('stage2');
+      startStage2(mosquito, {
+        onDone: (methodId) => showResult({ seconds, methodId }),
+      });
+    },
+  });
+}
+
+document.getElementById('btn-start').addEventListener('click', startGame);
 
 document.getElementById('btn-retry').addEventListener('click', resetGame);
