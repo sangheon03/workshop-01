@@ -1,0 +1,86 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0b0f1a;
+  color: #f2f4f8;
+  font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+}
+
+#game-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.screen {
+  position: fixed;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.screen.active {
+  display: flex;
+}
+
+/* 1·2단계는 3D 캔버스가 클릭을 받아야 하므로 화면 자체는 클릭을 통과시킨다. */
+#screen-stage1,
+#screen-stage2 {
+  justify-content: flex-start;
+  padding-top: 24px;
+  pointer-events: none;
+}
+
+#screen-stage1 button,
+#screen-stage2 button {
+  pointer-events: auto;
+}
+
+#screen-start,
+#screen-result {
+  background: rgba(11, 15, 26, 0.85);
+}
+
+h1 {
+  margin: 0;
+  font-size: 2.4rem;
+}
+
+p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.hint {
+  font-size: 1.1rem;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+button {
+  font: inherit;
+  font-size: 1.1rem;
+  padding: 10px 28px;
+  border: 0;
+  border-radius: 8px;
+  background: #ffcf40;
+  color: #1a1a1a;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #ffe08a;
+}
