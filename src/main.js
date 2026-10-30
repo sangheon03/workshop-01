@@ -10,10 +10,17 @@ export function showScreen(name) {
   }
 }
 
+// 지금 장면에 있는 모기. 1단계에서 잡힌 모기를 이 변수에 담는다 (이슈 #9에서 연결).
+let currentMosquito = null;
+
 export function resetGame() {
+  currentMosquito?.group?.parent?.remove(currentMosquito.group);
+  currentMosquito = null;
   showScreen('start');
 }
 
 document.getElementById('btn-start').addEventListener('click', () => {
   showScreen('stage1');
 });
+
+document.getElementById('btn-retry').addEventListener('click', resetGame);
