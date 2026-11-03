@@ -20,20 +20,16 @@
   <div id="bg-window" aria-hidden="true">
     <div class="bg-sky"></div>
     <div class="bg-sea"></div>
-    <svg class="bg-scenery" viewBox="0 0 300 375" preserveAspectRatio="xMidYMid slice">
-      <g fill="#fff" opacity="0.85">
-        <rect x="52" y="104" width="10" height="2" rx="1"/>
-        <rect x="84" y="133" width="16" height="2" rx="1"/>
-        <rect x="120" y="143" width="20" height="2" rx="1"/>
-        <rect x="42" y="164" width="26" height="3" rx="1.5"/>
-        <rect x="0" y="152" width="8" height="2" rx="1"/>
-        <rect x="172" y="156" width="8" height="2" rx="1"/>
-      </g>
-      <g transform="translate(40 242)">
-        <polygon points="18,0 18,28 4,28" fill="#fff"/>
-        <polygon points="21,6 21,28 32,28" fill="#f2f6fb"/>
-        <polygon points="0,31 36,31 31,36 6,36" fill="#fff"/>
-      </g>
+    <!-- 구름: assets/reference/cloud_grey.png, cloud_white.png (배경 투명 PNG).
+         창틀 십자 중심(가로 58%, 세로 56%)을 기준으로 놓고, 크기는 --u(최대 1.1px)에 비례해 고정. -->
+    <img class="bg-cloud" src="assets/reference/cloud_grey.png" alt="" style="left:calc(58% + var(--u) * -492.5);top:calc(56% + var(--u) * -297.5);width:calc(var(--u) * 420)">
+    <img class="bg-cloud" src="assets/reference/cloud_grey.png" alt="" style="left:calc(58% + var(--u) * 14.5);top:calc(56% + var(--u) * -331.3);width:calc(var(--u) * 216)">
+    <img class="bg-cloud" src="assets/reference/cloud_white.png" alt="" style="left:calc(58% + var(--u) * -318.5);top:calc(56% + var(--u) * -159.7);width:calc(var(--u) * 504)">
+    <!-- 배: 창 크기가 바뀌어도 크기가 그대로이고, 늘 바다 수평선(바다 시작선)에 앉는다. -->
+    <svg class="bg-boat" viewBox="0 0 36 36">
+      <polygon points="18,0 18,28 4,28" fill="#fff"/>
+      <polygon points="21,6 21,28 32,28" fill="#f2f6fb"/>
+      <polygon points="0,31 36,31 31,36 6,36" fill="#fff"/>
     </svg>
     <div class="bg-glass"></div>
     <div class="bg-frame"></div>
