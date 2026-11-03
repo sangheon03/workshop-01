@@ -105,7 +105,7 @@ function createButtons(container, onPick) {
   const buttons = new Map();
   for (const method of METHODS) {
     const button = document.createElement('button');
-    button.textContent = `${method.label} (-${method.damage})`;
+    button.textContent = method.label;
     button.addEventListener('click', () => onPick(method));
     bar.appendChild(button);
     buttons.set(method.id, button);
