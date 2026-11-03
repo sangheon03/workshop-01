@@ -95,20 +95,29 @@ function launch(unit, world) {
   });
 }
 
-export function playPluck(mosquito) {
-  const { group, parts } = mosquito;
-  const world = group.parent;
+// candidates: 고를 수 있는 모기들(한 마리 객체도 가능). 첫 클릭이 대상 모기를 정하고, 그 뒤로는 그 모기의 부위만 뜯는다.
+// options.onCommit(mosquito): 대상을 정한 순간 부른다 (그 뒤에는 취소할 수 없다).
+// options.signal: 대상을 정하기 전에 abort하면 정리하고 null을 돌려준다.
+// 다 뜯으면 대상이었던 모기를 돌려준다.
+export function playPluck(candidates, { signal, onCommit } = {}) {
+  const list = [].concat(candidates).filter(Boolean);
+  if (list.length === 0 || signal?.aborted) return Promise.resolve(null);
+  const world = list[0].group.parent;
   const { camera } = getScene();
   const canvas = document.getElementById('game-canvas');
 
-  let remaining = pluckables(parts);
-  const goal = Math.min(REQUIRED, remaining.length);
-  if (goal === 0) return Promise.resolve();
+  // 모기마다 뜯을 수 있는 부위. 어느 모기의 부위인지(owner)를 같이 기억한다.
+  let remaining = list.flatMap((mosquito) => pluckables(mosquito.parts).map((unit) => ({ ...unit, owner: mosquito })));
+  if (remaining.length === 0) return Promise.resolve(null);
 
   const hint = makeHint();
+  let chosen = null; // 첫 클릭으로 고른 모기
+  let goal = 0;
   let plucked = 0;
   const updateHint = () => {
-    hint.textContent = `모기의 날개·다리·주둥이를 클릭해서 뜯으세요! (${plucked}/${goal})`;
+    hint.textContent = chosen
+      ? `모기의 날개·다리·주둥이를 클릭해서 뜯으세요! (${plucked}/${goal})`
+      : '뜯고 싶은 모기의 날개·다리·주둥이를 클릭하세요!';
   };
   updateHint();
   const previousCursor = canvas.style.cursor;
@@ -116,17 +125,34 @@ export function playPluck(mosquito) {
 
   return new Promise((resolve) => {
     let lastFall = Promise.resolve();
+    let finished = false;
 
     const finish = async () => {
+      finished = true;
       canvas.removeEventListener('click', onClick);
       canvas.style.cursor = previousCursor;
       await lastFall;
       hint.remove();
-      mosquito.setTwitch?.(1);
-      resolve();
+      chosen.setTwitch?.(1);
+      resolve(chosen);
     };
 
+    // 대상을 정하기 전에는 취소할 수 있다.
+    signal?.addEventListener(
+      'abort',
+      () => {
+        if (chosen || finished) return;
+        finished = true;
+        canvas.removeEventListener('click', onClick);
+        canvas.style.cursor = previousCursor;
+        hint.remove();
+        resolve(null);
+      },
+      { once: true },
+    );
+
     const onClick = (event) => {
+      if (finished) return;
       // 클릭할 때마다 핀셋이 집는 듯 살짝 오므라들었다 돌아온다 (맞든 빗나가든 같다).
       playClickMotion(TWEEZERS, event.clientX, event.clientY, {
         ms: 200,
@@ -137,9 +163,11 @@ export function playPluck(mosquito) {
         ],
       });
       // 가장 가까운 부위를 찾는다. 반경 밖이면 잘못 누른 것이므로 무시한다.
+      // 대상을 정한 뒤에는 그 모기의 부위만 후보다.
       let best = null;
       let bestDistance = PICK_RADIUS;
       for (const unit of remaining) {
+        if (chosen && unit.owner !== chosen) continue;
         const p = screenPosition(unit, camera);
         const d = Math.hypot(p.x - event.clientX, p.y - event.clientY);
         if (d < bestDistance) {
@@ -149,11 +177,19 @@ export function playPluck(mosquito) {
       }
       if (!best) return;
 
+      if (!chosen) {
+        // 첫 부위를 누른 모기가 이번 처치의 대상이다. 그 모기의 부위만 남기고 목표 개수를 정한다.
+        chosen = best.owner;
+        remaining = remaining.filter((unit) => unit.owner === chosen);
+        goal = Math.min(REQUIRED, remaining.length);
+        onCommit?.(chosen);
+      }
+
       remaining = remaining.filter((u) => u !== best);
       plucked += 1;
       updateHint();
-      // 뜯을 때마다 모기가 더 부들부들 떤다.
-      mosquito.setTwitch?.(1 + plucked * 1.5);
+      // 뜯을 때마다 그 모기가 더 부들부들 떤다.
+      chosen.setTwitch?.(1 + plucked * 1.5);
       lastFall = launch(best, world);
 
       if (plucked >= goal) finish();

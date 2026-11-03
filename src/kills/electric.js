@@ -342,31 +342,54 @@ function drawArc(line, from, to, amount) {
 
 const easeIn = (x) => x * x * (3 - 2 * x);
 
-// 전기충격을 고르면 커서에 작은 스파크가 계속 떠 있고, 모기를 클릭하면 전기가 모기로 옮겨가서 충격이 시작된다.
-export function playElectric(mosquito) {
-  const { group } = mosquito;
-  const world = group.parent;
+// 전기충격을 고르면 커서에 작은 스파크가 계속 떠 있고, 원하는 모기를 클릭하면 전기가 그 모기로 옮겨가서 충격이 시작된다.
+// candidates: 고를 수 있는 모기들(한 마리 객체도 가능). 클릭한 모기만 충격을 받고, 그 모기를 돌려준다.
+// options.onCommit(mosquito): 대상을 정한 순간 부른다 (그 뒤에는 취소할 수 없다).
+// options.signal: 대상을 정하기 전에 abort하면 정리하고 null을 돌려준다.
+export function playElectric(candidates, { signal, onCommit } = {}) {
+  const list = [].concat(candidates).filter(Boolean);
+  if (list.length === 0 || signal?.aborted) return Promise.resolve(null);
+  const world = list[0].group.parent;
   const { camera } = getScene();
   const canvas = document.getElementById('game-canvas');
 
-  const center = group.position.clone();
-  const sphere = new THREE.Sphere(center, TOUCH_RADIUS);
-  // 스파크는 모기 앞쪽 평면 위에서 움직이고, 클릭한 점은 모기가 있는 깊이의 평면 위에 찍는다.
-  const sparkPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -(center.z + CURSOR_FRONT));
-  const contactPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -center.z);
+  // 후보 모기마다 닿는 구. 모기들이 같은 깊이에 서 있으므로 스파크 평면은 첫 모기의 깊이를 쓴다.
+  const spheres = list.map((mosquito) => ({
+    mosquito,
+    center: mosquito.group.position.clone(),
+    sphere: new THREE.Sphere(mosquito.group.position.clone(), TOUCH_RADIUS),
+  }));
+  const middle = spheres.reduce((sum, e) => sum.add(e.center), new THREE.Vector3()).divideScalar(spheres.length);
+  const sparkPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -(middle.z + CURSOR_FRONT));
   const raycaster = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
   const hit = new THREE.Vector3();
 
-  const target = center.clone().add(new THREE.Vector3(0, 1.6, CURSOR_FRONT));
+  const target = middle.clone().add(new THREE.Vector3(0, 1.6, CURSOR_FRONT));
   const sparkPos = target.clone();
-  const entry = center.clone();
+  const entry = middle.clone();
+  let chosen = null; // 클릭해서 고른 후보 { mosquito, center }
   let hovering = false;
 
   // 마우스 위치에서 카메라 광선을 쏜다.
   const aim = (event) => {
     ndc.set((event.clientX / window.innerWidth) * 2 - 1, -(event.clientY / window.innerHeight) * 2 + 1);
     raycaster.setFromCamera(ndc, camera);
+  };
+  // 광선이 닿은 후보 중 카메라에 가장 가까운 것.
+  const hitPoint = new THREE.Vector3();
+  const pickCandidate = () => {
+    let best = null;
+    let bestDistance = Infinity;
+    for (const entryItem of spheres) {
+      if (!raycaster.ray.intersectSphere(entryItem.sphere, hitPoint)) continue;
+      const distance = hitPoint.distanceTo(camera.position);
+      if (distance < bestDistance) {
+        best = entryItem;
+        bestDistance = distance;
+      }
+    }
+    return best;
   };
 
   // 커서 스파크: 빛 알갱이 + 짧게 튀는 번개 + 꼬리(혜성처럼 따라오는 빛).
@@ -406,7 +429,7 @@ export function playElectric(mosquito) {
     pointerEvents: 'none',
     zIndex: '5',
   });
-  hint.textContent = '스파크를 모기에 대고 클릭해서 전기를 옮기세요!';
+  hint.textContent = '스파크를 원하는 모기에 대고 클릭해서 전기를 옮기세요!';
   document.body.appendChild(hint);
   const previousCursor = canvas.style.cursor;
   canvas.style.cursor = 'none';
@@ -420,17 +443,21 @@ export function playElectric(mosquito) {
     aim(event);
     if (raycaster.ray.intersectPlane(sparkPlane, hit)) target.copy(hit);
     // 모기 위에 올라가면 스파크가 더 거세게 튄다.
-    hovering = raycaster.ray.intersectsSphere(sphere);
+    hovering = pickCandidate() !== null;
   };
   const onClick = (event) => {
     if (transferStart !== null) return;
     aim(event);
-    if (!raycaster.ray.intersectsSphere(sphere)) return;
-    // 모기를 눌렀다: 클릭한 점으로 전기가 옮겨간다.
+    const picked = pickCandidate();
+    if (!picked) return;
+    // 모기를 눌렀다: 그 모기로, 클릭한 점으로 전기가 옮겨간다.
+    chosen = picked;
+    const contactPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -picked.center.z);
     if (raycaster.ray.intersectPlane(contactPlane, hit)) entry.copy(hit);
     transferFrom = sparkPos.clone();
     transferStart = performance.now();
     hint.remove();
+    onCommit?.(picked.mosquito);
   };
   window.addEventListener('pointermove', onMove);
   canvas.addEventListener('click', onClick);
@@ -455,7 +482,21 @@ export function playElectric(mosquito) {
 
   return new Promise((resolve) => {
     const ball = new THREE.Vector3();
+    let cancelled = false;
+    // 대상을 정하기 전에는 취소할 수 있다.
+    signal?.addEventListener(
+      'abort',
+      () => {
+        if (transferStart !== null || cancelled) return;
+        cancelled = true;
+        cleanup();
+        canvas.style.cursor = previousCursor;
+        resolve(null);
+      },
+      { once: true },
+    );
     const tick = (now) => {
+      if (cancelled) return;
       const t = now / 1000;
 
       if (transferStart === null) {
@@ -501,10 +542,10 @@ export function playElectric(mosquito) {
       if (transferStart !== null && now - transferStart >= TRANSFER_MS) {
         cleanup();
         // 전기가 들어간 점에서 번개가 튀도록 모기 기준 좌표로 넘긴다.
-        const entryLocal = entry.clone().sub(center);
-        shock(mosquito, () => entryLocal).then(() => {
+        const entryLocal = entry.clone().sub(chosen.center);
+        shock(chosen.mosquito, () => entryLocal).then(() => {
           canvas.style.cursor = previousCursor;
-          resolve();
+          resolve(chosen.mosquito);
         });
         return;
       }
