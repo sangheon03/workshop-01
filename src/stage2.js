@@ -1,15 +1,18 @@
 import * as THREE from 'three';
 import { getScene } from './scene.js';
 import { playElectric } from './kills/electric.js';
-import { playPluck } from './kills/pluck.js';
+import { playPluck, canPluck } from './kills/pluck.js';
 import { playMagnify } from './kills/magnify.js';
 
 const MAX_HP = 100;
-// 방법별 피해량. 한 모기에 같은 방법은 한 번만 쓸 수 있고, 어떤 조합이든 2~3가지를 쓰면 그 모기의 HP가 0이 된다.
+// 처치 방법.
+// - shot: 대상을 고르면 한 번 충격이 들어가는 방법. 한 모기에 한 번만 쓸 수 있다. damage는 그 한 번의 피해.
+// - tool: 켜 두는 도구. 켜 두면 아무 모기에게나 계속 쓸 수 있고, 모기를 바꿔 가며 쓸 수 있다.
+//   damage는 쓸 때마다(신체뜯기는 부위 하나, 돋보기는 0.3초) 주는 피해.
 const METHODS = [
-  { id: 'electric', label: '전기충격', damage: 50, play: playElectric },
-  { id: 'pluck', label: '신체뜯기', damage: 40, play: playPluck },
-  { id: 'magnify', label: '돋보기화형', damage: 50, play: playMagnify },
+  { id: 'electric', label: '전기충격', kind: 'shot', damage: 50, play: playElectric },
+  { id: 'pluck', label: '신체뜯기', kind: 'tool', damage: 10, play: playPluck },
+  { id: 'magnify', label: '돋보기화형', kind: 'tool', damage: 5, play: playMagnify },
 ];
 // 마지막 모기가 죽은 뒤 잠깐 보여 주고 결과로 넘어간다.
 const DEATH_PAUSE_MS = 900;
@@ -130,7 +133,7 @@ function createButtons(container, onPick) {
   }
   container.appendChild(bar);
 
-  // busy: 대상이 정해져 연출 중이라 모두 막는다. armed: 지금 고른(대상을 고르는 중인) 방법은 강조한다.
+  // busy: 전기충격 연출 중이라 모두 막는다. armed: 지금 켜 둔(대상을 고르는 중이거나 도구를 쓰는 중인) 방법은 강조한다.
   // 쓸 수 있는 모기가 하나도 없는 방법은 막는다.
   const refresh = ({ busy, armed, available }) => {
     for (const [id, button] of buttons) {
@@ -154,14 +157,15 @@ export function startStage2(mosquitoes, { onDone }) {
   stopIdleLoop();
   stopBarLoop();
 
-  // 모기마다 HP와 쓴 방법을 따로 가진다.
+  // 모기마다 HP와 (전기충격처럼 한 번만 쓰는) 쓴 방법을 따로 가진다.
   const units = list.map((mosquito) => ({ mosquito, hp: MAX_HP, used: [], bar: null }));
   const usedOrder = []; // 결과 화면에 보여 줄, 처음 쓴 순서의 방법 id (중복 없음)
   let busy = false;
-  let armed = null; // 대상을 고르는 중인 방법 id
+  let armed = null; // 지금 켜 둔 방법 id
   let controller = null;
   let session = 0;
   let positioned = false;
+  let finished = false;
 
   // 잡히면 움찔거리기 시작한다. 죽은 뒤에도 계속 유지된다.
   list.forEach((m) => m.setTwitch?.(1));
@@ -169,16 +173,51 @@ export function startStage2(mosquitoes, { onDone }) {
   createHpBars(container, units);
   units.forEach(showHp);
 
-  // 이 방법으로 처치할 수 있는 모기: 살아 있고 이 방법을 아직 안 쓴 모기.
-  const candidatesOf = (id) => units.filter((u) => u.hp > 0 && !u.used.includes(id));
-  const refresh = () => buttons.refresh({ busy, armed, available: (id) => candidatesOf(id).length });
+  const alive = () => units.filter((u) => u.hp > 0);
+  // 이 방법으로 지금 처치할 수 있는 모기: 살아 있고, 한 번만 쓰는 방법이면 아직 안 쓴 모기, 신체뜯기면 뜯을 부위가 남은 모기.
+  const candidatesOf = (method) =>
+    alive()
+      .filter((u) => (method.kind === 'shot' ? !u.used.includes(method.id) : true))
+      .filter((u) => (method.id === 'pluck' ? canPluck(u.mosquito) : true))
+      .map((u) => u.mosquito);
+  const refresh = () =>
+    buttons.refresh({
+      busy,
+      armed,
+      available: (id) => candidatesOf(METHODS.find((m) => m.id === id)).length,
+    });
+
+  // 모기 하나에 피해를 준다. 모든 모기가 죽었으면 결과로 넘어간다.
+  const damage = (mosquito, method) => {
+    const unit = units.find((u) => u.mosquito === mosquito);
+    if (!unit || unit.hp <= 0 || finished) return;
+    if (method.kind === 'shot') unit.used.push(method.id);
+    unit.hp = Math.max(0, unit.hp - method.damage);
+    showHp(unit);
+    if (!usedOrder.includes(method.id)) usedOrder.push(method.id);
+    if (alive().length === 0) finish();
+    else refresh();
+  };
+
+  // 모든 모기가 죽었다: 켜 둔 도구를 끄고 버튼을 치운 뒤 잠깐 있다가 결과로. 죽은 모기는 장면에 그대로 둔다.
+  const finish = () => {
+    finished = true;
+    controller?.abort();
+    controller = null;
+    buttons.el.remove();
+    setTimeout(() => {
+      stopBarLoop();
+      onDone([...usedOrder]);
+    }, DEATH_PAUSE_MS + 500);
+  };
 
   const buttons = createButtons(container, async (method) => {
-    if (busy) return;
-    // 같은 방법을 다시 누르면 취소, 다른 방법을 누르면 그 방법으로 바꾼다. (대상을 정하기 전까지)
-    if (controller) controller.abort();
+    if (busy || finished) return;
+    // 켜 둔 것이 있으면 끈다. 같은 버튼을 다시 누르면 끄기만 하고, 다른 버튼이면 그 방법으로 바꾼다.
+    const wasSame = armed === method.id;
+    controller?.abort();
     controller = null;
-    if (armed === method.id) {
+    if (wasSame) {
       armed = null;
       refresh();
       return;
@@ -196,42 +235,36 @@ export function startStage2(mosquitoes, { onDone }) {
     controller = new AbortController();
     refresh();
 
-    const candidates = candidatesOf(method.id);
-    const target = await method.play(
-      candidates.map((u) => u.mosquito),
-      {
+    if (method.kind === 'shot') {
+      const target = await method.play(candidatesOf(method), {
         signal: controller.signal,
         // 대상이 정해졌다: 이제 취소할 수 없고, 연출이 끝날 때까지 다른 버튼도 막는다.
         onCommit: () => {
           busy = true;
           refresh();
         },
-      },
-    );
-
-    // 취소됐거나 다른 방법으로 바뀐 경우: 이 호출은 상태를 건드리지 않는다.
-    if (target === null || mine !== session) return;
-
-    const unit = units.find((u) => u.mosquito === target);
-    unit.used.push(method.id);
-    unit.hp = Math.max(0, unit.hp - method.damage);
-    showHp(unit);
-    if (!usedOrder.includes(method.id)) usedOrder.push(method.id);
-    busy = false;
-    armed = null;
-    controller = null;
-
-    if (units.some((u) => u.hp > 0)) {
+      });
+      // 취소됐거나 다른 방법으로 바뀐 경우: 이 호출은 상태를 건드리지 않는다.
+      if (target === null || mine !== session) return;
+      busy = false;
+      armed = null;
+      controller = null;
+      damage(target, method);
       refresh();
       return;
     }
 
-    // 모든 모기가 죽었다: 버튼을 치우고 잠깐 뒤 결과로. 죽은 모기는 장면에 그대로 둔다.
-    buttons.el.remove();
-    setTimeout(() => {
-      stopBarLoop();
-      onDone([...usedOrder]);
-    }, DEATH_PAUSE_MS);
+    // 켜 두는 도구: 끌 때까지(또는 쓸 수 있는 모기가 없어질 때까지) 계속 쓴다. 쓸 때마다 onHit로 피해를 준다.
+    await method.play({
+      getTargets: () => candidatesOf(method),
+      onHit: (mosquito) => damage(mosquito, method),
+      signal: controller.signal,
+    });
+    if (mine === session && !finished) {
+      armed = null;
+      controller = null;
+      refresh();
+    }
   });
   refresh();
 }
