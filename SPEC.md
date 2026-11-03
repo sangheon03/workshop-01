@@ -62,7 +62,7 @@
 
 | 담당 | 맡을 영역 | 파일 |
 | --- | --- | --- |
-| **sangheon03** (Leader) | 뼈대, 화면 전환, 결과 화면, SPEC·이슈·합치기·리뷰 | `index.html`, `style.css`, `src/main.js`, `src/result.js` |
+| **sangheon03** (Leader) | 뼈대, 화면 전환, 결과 화면, SPEC·이슈·합치기·리뷰 | `index.html`, `style.css`, `src/main.js`, `src/result.js`, `src/cursors.js` |
 | **fernwehs** (Builder A) | 3D 장면, 모기, 비행, 파리채, 1단계 | `src/scene.js`, `src/mosquito.js`, `src/stage1.js`, `src/swatter.js` |
 | **jooyeonpark822** (Builder B) | 2단계 화면, 처치 연출 (전기충격·신체뜯기, 돋보기화형은 조건부) | `src/stage2.js`, `src/kills/electric.js`, `src/kills/magnify.js`, `src/kills/pluck.js` |
 
@@ -88,6 +88,12 @@
 
 ### 파리채 — `src/swatter.js` (fernwehs)
 - `enableSwatter({ mosquito, onCaught })` / `disableSwatter()` : 파리채 커서를 켜고 끈다. `stage1.js`가 호출한다. `mosquito`와 `onCaught`는 선택 인자이고, 주면 클릭 판정도 한다 (PR #20에서 확인, Leader 승인).
+
+### 커서 이미지 — `src/cursors.js` (Leader)
+- `SWATTER`, `TWEEZERS` : `{ cursor, image, width, height, hot }`. `cursor`는 CSS `cursor` 값, `hot`은 클릭이 찍히는 이미지 안의 점.
+- `playClickMotion(tool, x, y, { scale, frames, ms })` : 클릭한 자리에 이미지를 잠깐 겹쳐 보여 주는 모션.
+- 이미지는 `assets/cursors/`에 있다 (`swatter.png`·`tweezers.png`와 `@2x`). 원본은 `*-original.png`. 커서는 128px 이하여야 해서 줄인 파일을 쓴다.
+- 1단계의 파리채(`swatter.js`)와 신체뜯기(`kills/pluck.js`)가 이걸 불러 쓴다.
 
 ### 2단계 — `src/stage2.js` (jooyeonpark822)
 - `startStage2(mosquito, { onDone })` : 모기를 가운데로 옮기고 처치 버튼 3개를 보여준다. 모기의 HP가 0이 되면 `onDone(methodIds)`를 호출한다.

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { getScene } from '../scene.js';
+import { TWEEZERS, playClickMotion } from '../cursors.js';
 
 // 이번 처치에서 뜯어야 하는 부위 수. 다 뜯으면 끝난다.
 const REQUIRED = 3;
@@ -111,7 +112,7 @@ export function playPluck(mosquito) {
   };
   updateHint();
   const previousCursor = canvas.style.cursor;
-  canvas.style.cursor = 'pointer';
+  canvas.style.cursor = TWEEZERS.cursor;
 
   return new Promise((resolve) => {
     let lastFall = Promise.resolve();
@@ -126,6 +127,15 @@ export function playPluck(mosquito) {
     };
 
     const onClick = (event) => {
+      // 클릭할 때마다 핀셋이 집는 듯 살짝 오므라들었다 돌아온다 (맞든 빗나가든 같다).
+      playClickMotion(TWEEZERS, event.clientX, event.clientY, {
+        ms: 200,
+        frames: [
+          { transform: 'rotate(-10deg) scale(1.15)', opacity: 1 },
+          { transform: 'rotate(4deg) scale(0.92)', opacity: 1, offset: 0.6 },
+          { transform: 'rotate(4deg) scale(0.92)', opacity: 0 },
+        ],
+      });
       // 가장 가까운 부위를 찾는다. 반경 밖이면 잘못 누른 것이므로 무시한다.
       let best = null;
       let bestDistance = PICK_RADIUS;
