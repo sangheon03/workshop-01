@@ -9,23 +9,58 @@ function cursorValue(name, hotX, hotY, fallback) {
   return `-webkit-image-set(url("${url(`${name}.png`)}") 1x, url("${url(`${name}@2x.png`)}") 2x) ${hotX} ${hotY}, ${fallback}`;
 }
 
-// 파리채: 그물 한가운데가 클릭 지점이다. 이미지는 112x108(1x).
+// 파리채: 그물 한가운데가 클릭 지점이다. 이미지는 180x178(1x).
+// 커서 이미지는 128px까지만 되는데 파리채는 그보다 커서, 커서 대신 followCursor()로 마우스를 따라다니게 그린다.
 export const SWATTER = {
-  cursor: cursorValue('swatter', 33, 27, 'crosshair'),
+  cursor: 'none',
   image: url('swatter@2x.png'),
-  width: 112,
-  height: 108,
-  hot: { x: 33, y: 27 },
+  width: 180,
+  height: 178,
+  hot: { x: 40, y: 40 },
 };
 
-// 핀셋: 뾰족한 끝이 클릭 지점이다. 이미지는 96x96(1x).
+// 핀셋: 두 날의 뾰족한 끝이 클릭 지점이다. 이미지는 103x120(1x).
 export const TWEEZERS = {
-  cursor: cursorValue('tweezers', 22, 17, 'pointer'),
+  cursor: cursorValue('tweezers', 5, 5, 'pointer'),
   image: url('tweezers@2x.png'),
-  width: 96,
-  height: 96,
-  hot: { x: 22, y: 17 },
+  width: 103,
+  height: 120,
+  hot: { x: 5, y: 5 },
 };
+
+// 128px보다 큰 도구 이미지를 커서처럼 마우스에 붙여 보여 준다. 부르면 따라다니기 시작하고, 돌려받은 함수를 부르면 멈춘다.
+// 이 이미지는 클릭을 가로채지 않는다(pointer-events: none).
+export function followCursor(tool) {
+  const el = document.createElement('img');
+  el.src = tool.image;
+  Object.assign(el.style, {
+    position: 'fixed',
+    left: '0',
+    top: '0',
+    width: `${tool.width}px`,
+    height: `${tool.height}px`,
+    pointerEvents: 'none',
+    zIndex: 9,
+    // 첫 마우스 움직임이 있기 전에는 숨겨 둔다.
+    display: 'none',
+  });
+  document.body.appendChild(el);
+
+  const onMove = (event) => {
+    el.style.display = 'block';
+    el.style.transform = `translate(${event.clientX - tool.hot.x}px, ${event.clientY - tool.hot.y}px)`;
+  };
+  const onLeave = () => {
+    el.style.display = 'none';
+  };
+  window.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerleave', onLeave);
+  return () => {
+    window.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerleave', onLeave);
+    el.remove();
+  };
+}
 
 // 클릭한 자리에 커서와 같은 크기로 이미지를 잠깐 겹쳐 보여 주는 모션 (맞든 빗나가든 같다).
 // scale: 이미지 크기 배율, frames: Web Animations 키프레임, ms: 길이.
