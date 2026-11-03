@@ -39,7 +39,9 @@ function startTorture() {
   const mosquitoes = captured;
   stopStage1();
   showScreen('stage2');
-  startStage2(mosquitoes, {
+  // SPEC: startStage2는 배열도, 한 마리 객체도 받는다. 한 마리면 객체로 넘겨서
+  // 아직 배열을 받지 못하는 예전 2단계와도 맞춰 둔다. (여러 마리를 지원하는 #59가 합쳐진 뒤에는 어느 쪽이든 된다.)
+  startStage2(mosquitoes.length === 1 ? mosquitoes[0] : mosquitoes, {
     onDone: (methodIds) => showResult({ methodIds, mosquitoes }),
   });
 }
