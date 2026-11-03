@@ -50,11 +50,28 @@ body {
 }
 
 /* 창틀: assets/reference/window.png (십자 틀, 유리 부분은 투명, 그림자 띠 포함).
-   화면을 꽉 채우되(cover) 십자 중심이 화면 가운데쯤 오도록 맞춘다. */
+   이미지를 9조각(border-image)으로 나눠, 틀 부분만 얇게 하고 유리 칸은 화면 크기에 맞게 늘린다.
+   - 이미지(2333x3070)에서 세로 틀은 x 1135~1277, 가로 틀은 y 1473~1569, 교차부 디테일은 y 1410~1569.
+   - 가운데 조각(교차부)을 세로 --frame-v x 가로 --frame-h 크기로 줄이고, 십자 중심이 화면의 (50%, 49%)에 오게 한다.
+   굵기를 바꾸려면 --frame-v(세로 틀 폭)와 --frame-h(가로 틀 두께)만 고친다. 원본 비율은 143:97. */
+:root {
+  --frame-v: 5vmin;
+  --frame-h: 3.4vmin;
+  --frame-h-piece: calc(var(--frame-h) * 160 / 97); /* 교차부 조각 높이 (틀 두께 + 위쪽 디테일) */
+}
+
 .bg-frame {
   position: absolute;
   inset: 0;
-  background: url("assets/reference/window.png") 50% 48.5% / cover no-repeat;
+  border: 0 solid transparent;
+  border-image-source: url("assets/reference/window.png");
+  border-image-slice: 1410 1055 1500 1135 fill;
+  border-image-width:
+    calc(49% - var(--frame-h) / 2 - (var(--frame-h-piece) - var(--frame-h)))
+    calc(50% - var(--frame-v) / 2)
+    calc(51% - var(--frame-h) / 2)
+    calc(50% - var(--frame-v) / 2);
+  border-image-repeat: stretch;
 }
 
 #game-canvas {
