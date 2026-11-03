@@ -12,6 +12,63 @@ body {
   font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
 }
 
+/* 유리창 배경: 하늘 + 바다 + 반투명 유리 + 창틀. 3D 캔버스(투명) 뒤에 깔린다. */
+#bg-window {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #2f7fc8;
+}
+
+.bg-sky {
+  position: absolute;
+  inset: 0 0 26% 0;
+  background: linear-gradient(180deg, #2c7fc9 0%, #5aa5de 55%, #8ccbe8 100%);
+}
+
+.bg-sea {
+  position: absolute;
+  inset: 74% 0 0 0;
+  background: linear-gradient(180deg, #2a3fb4 0%, #4a67d6 55%, #7b95ee 100%);
+}
+
+.bg-scenery {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* 반투명 유리: 옅은 흰 막과 대각선 빛 번짐 */
+.bg-glass {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0) 30%, rgba(255, 255, 255, 0.16) 42%, rgba(255, 255, 255, 0) 54%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03));
+  box-shadow: inset 0 0 120px rgba(8, 24, 60, 0.35);
+}
+
+.bg-frame {
+  position: absolute;
+  background: #232323;
+  box-shadow: 0 0 14px rgba(0, 0, 0, 0.35);
+}
+
+.bg-frame-v {
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 1.2vmin);
+  width: 2.4vmin;
+}
+
+.bg-frame-h {
+  left: 0;
+  right: 0;
+  top: calc(49% - 1.2vmin);
+  height: 2.4vmin;
+}
+
 #game-canvas {
   position: fixed;
   inset: 0;
@@ -50,7 +107,16 @@ body {
 
 #screen-start,
 #screen-result {
-  background: rgba(11, 15, 26, 0.85);
+  background: rgba(11, 15, 26, 0.3);
+  backdrop-filter: blur(2px);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+}
+
+#result-mosquito {
+  max-width: min(70vw, 420px);
+  max-height: 34vh;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.45));
 }
 
 h1 {
