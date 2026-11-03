@@ -11,7 +11,7 @@ const wingMat = new THREE.MeshStandardMaterial({
 const legMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
 
 const MODEL_URL = new URL('../assets/mosquito_reference.gltf', import.meta.url).href;
-const BODY_LENGTH = 1.2;
+const BODY_LENGTH = 1.08; // 모델 모기의 몸 길이(월드 단위). 1.2에서 10% 줄임
 // 모델은 머리가 +x를 향하고 게임의 모기는 +z를 향하므로 y축으로 돌려 맞춘다.
 const TURN = new THREE.Matrix4().makeRotationY(-Math.PI / 2);
 
