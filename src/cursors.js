@@ -9,14 +9,14 @@ function cursorValue(name, hotX, hotY, fallback) {
   return `-webkit-image-set(url("${url(`${name}.png`)}") 1x, url("${url(`${name}@2x.png`)}") 2x) ${hotX} ${hotY}, ${fallback}`;
 }
 
-// 파리채: 그물 한가운데가 클릭 지점이다. 이미지는 180x178(1x).
+// 파리채: 그물 한가운데가 클릭 지점이다. 이미지는 360x356. 2x 파일이 그대로 원래 크기로 보인다.
 // 커서 이미지는 128px까지만 되는데 파리채는 그보다 커서, 커서 대신 followCursor()로 마우스를 따라다니게 그린다.
 export const SWATTER = {
   cursor: 'none',
   image: url('swatter@2x.png'),
-  width: 180,
-  height: 178,
-  hot: { x: 40, y: 40 },
+  width: 360,
+  height: 356,
+  hot: { x: 80, y: 80 },
 };
 
 // 핀셋: 두 날의 뾰족한 끝이 클릭 지점이다. 이미지는 103x120(1x).
