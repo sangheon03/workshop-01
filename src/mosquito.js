@@ -100,7 +100,70 @@ function createModelMosquito() {
 }
 
 export function createMosquito() {
-  return model ? createModelMosquito() : createTempMosquito();
+  const mosquito = model ? createModelMosquito() : createTempMosquito();
+  mosquito.setTwitch = createTwitch(mosquito);
+  return mosquito;
+}
+
+// 잡힌 모기의 움찔거림. level 0은 멈춤, 1은 기본, 클수록 격하게 떤다. 바꾸기 전까지 계속 유지된다.
+// 매 프레임 "지난 프레임에 더한 흔들림"을 먼저 빼고 새 흔들림을 더하는 방식이라,
+// 다른 코드가 위치·날개를 옮겨도 모기가 밀려나지 않고 원래 자리를 기준으로 흔들린다.
+// 모기가 장면에서 빠지면(resetGame 등) 스스로 멈춘다. 부위가 없거나 떨어져 나가도 에러 없이 건너뛴다.
+function createTwitch(mosquito) {
+  const { group } = mosquito;
+  const shake = new THREE.Vector3();
+  const lastShake = new THREE.Vector3();
+  const lastRot = new Map(); // 부위 -> 지난 프레임에 더한 회전(z)
+  let level = 0;
+  let frameId = null;
+  let seed = Math.random() * 100;
+
+  const rotating = () => {
+    const { parts } = mosquito;
+    return [parts.wingL, parts.wingR, ...(parts.legs ?? [])].filter(Boolean);
+  };
+
+  function apply(offset, rotFor) {
+    group.position.sub(lastShake).add(offset);
+    lastShake.copy(offset);
+    const next = new Map();
+    for (const part of rotating()) {
+      const rot = rotFor(part);
+      part.rotation.z += rot - (lastRot.get(part) ?? 0);
+      next.set(part, rot);
+    }
+    lastRot.clear();
+    for (const [part, rot] of next) lastRot.set(part, rot);
+  }
+
+  function tick(now) {
+    if (!group.parent) {
+      frameId = null;
+      return;
+    }
+    frameId = requestAnimationFrame(tick);
+    const t = now / 1000 + seed;
+    const power = Math.min(level, 10);
+    const amp = 0.015 * power;
+    const hz = 18 + 4 * power;
+    shake.set(
+      Math.sin(t * hz * 6.28) * amp,
+      Math.sin(t * hz * 5.1 + 1) * amp,
+      Math.sin(t * hz * 4.3 + 2) * amp * 0.5,
+    );
+    apply(shake, (part) => Math.sin(t * hz * 7 + part.id) * 0.08 * power);
+  }
+
+  return function setTwitch(next) {
+    level = Math.max(0, Number(next) || 0);
+    if (level > 0) {
+      if (frameId === null) frameId = requestAnimationFrame(tick);
+    } else {
+      if (frameId !== null) cancelAnimationFrame(frameId);
+      frameId = null;
+      apply(shake.set(0, 0, 0), () => 0);
+    }
+  };
 }
 
 // 임시 모기: 도형을 조립해서 만든다. 모델을 불러오지 못했을 때만 쓴다. parts 이름은 모델 모기와 같다.
