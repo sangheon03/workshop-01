@@ -140,6 +140,7 @@ export function playMagnify(candidates, { signal, onCommit } = {}) {
     if (raycaster.ray.intersectPlane(plane, hit)) target.copy(hit);
   };
   window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerdown', onMove); // 터치는 대기만 하면 pointermove가 오지 않으므로 닿는 순간에도 렌즈를 옮긴다
 
   const hint = document.createElement('p');
   hint.className = 'hint';
@@ -198,6 +199,7 @@ export function playMagnify(candidates, { signal, onCommit } = {}) {
 
     const cleanup = () => {
       window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerdown', onMove);
       canvas.style.cursor = previousCursor;
       hint.remove();
       world.remove(lens, beam, glow, spot, ...smoke);

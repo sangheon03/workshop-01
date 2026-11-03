@@ -7,6 +7,11 @@ body {
   margin: 0;
   height: 100%;
   overflow: hidden;
+  overscroll-behavior: none; /* 폰에서 당겨서 새로고침·튕김 방지 */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none; /* 길게 눌러도 메뉴가 뜨지 않게 */
+  user-select: none;
+  -webkit-user-select: none;
   background: #0b0f1a;
   color: #f2f4f8;
   font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
@@ -91,6 +96,7 @@ body {
   width: 100%;
   height: 100%;
   display: block;
+  touch-action: none; /* 손가락 드래그가 스크롤·확대가 되지 않고 그대로 pointermove로 오게 한다 */
 }
 
 .screen {
@@ -194,6 +200,8 @@ p {
 button {
   font: inherit;
   font-size: 1.1rem;
+  min-height: 44px; /* 손가락으로 누르기 좋은 최소 크기 */
+  touch-action: manipulation; /* 두 번 탭 확대 방지 */
   padding: 10px 28px;
   border: 0;
   border-radius: 8px;
@@ -204,4 +212,78 @@ button {
 
 button:hover {
   background: #ffe08a;
+}
+
+/* 안전 영역(노치·홈 막대)을 피해서 아래쪽 요소를 올린다 */
+#catch-hud {
+  bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+}
+
+#screen-stage1,
+#screen-stage2 {
+  padding-top: calc(24px + env(safe-area-inset-top, 0px));
+}
+
+/* 폰 등 좁은 화면 */
+@media (max-width: 640px) {
+  h1 {
+    font-size: 1.9rem;
+  }
+
+  .screen {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .hint {
+    max-width: 92vw;
+    font-size: 0.95rem;
+    line-height: 1.45;
+  }
+
+  button {
+    font-size: 1rem;
+    padding: 10px 16px;
+  }
+
+  /* 1단계 아래쪽 HUD: 좁으면 두 줄로 */
+  #catch-hud {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    font-size: 1rem;
+    padding: 0 12px;
+  }
+
+  /* 2단계 처치 버튼은 stage2.js가 인라인으로 만든다. 간격과 줄바꿈, 안전 영역만 덮어쓴다. */
+  #stage2-buttons {
+    flex-wrap: wrap;
+    gap: 8px !important;
+    padding: 0 12px;
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* 돋보기·전기충격의 안내 문구(JS가 하단에 고정으로 만든다)도 버튼 위로 */
+  .hint[style*="bottom: 90px"] {
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
+    width: max-content;
+  }
+
+  #result-mosquitoes img {
+    max-width: min(40vw, 200px);
+  }
+}
+
+/* 키가 낮은 화면(폰 가로): 위아래 여백을 줄인다 */
+@media (max-height: 480px) {
+  h1 {
+    font-size: 1.6rem;
+  }
+
+  .screen {
+    gap: 8px;
+  }
+
+  #result-mosquitoes img {
+    max-height: 30vh;
+  }
 }
