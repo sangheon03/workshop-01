@@ -49,24 +49,12 @@ body {
   box-shadow: inset 0 0 120px rgba(8, 24, 60, 0.35);
 }
 
+/* 창틀: assets/reference/window.png (십자 틀, 유리 부분은 투명, 그림자 띠 포함).
+   화면을 꽉 채우되(cover) 십자 중심이 화면 가운데쯤 오도록 맞춘다. */
 .bg-frame {
   position: absolute;
-  background: #232323;
-  box-shadow: 0 0 14px rgba(0, 0, 0, 0.35);
-}
-
-.bg-frame-v {
-  top: 0;
-  bottom: 0;
-  left: calc(50% - 1.2vmin);
-  width: 2.4vmin;
-}
-
-.bg-frame-h {
-  left: 0;
-  right: 0;
-  top: calc(49% - 1.2vmin);
-  height: 2.4vmin;
+  inset: 0;
+  background: url("assets/reference/window.png") 50% 48.5% / cover no-repeat;
 }
 
 #game-canvas {
