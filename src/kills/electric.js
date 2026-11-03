@@ -7,6 +7,7 @@ const BOLT_RADIUS = 2.6; // 번개가 뻗는 최대 길이
 const GLOW_NEAR_SIZE = 1.6; // 모기 바로 둘레 빛 무리 크기
 const GLOW_FAR_SIZE = 3.4; // 넓게 퍼지는 빛 무리 크기
 const GLOW_ENTRY_SIZE = 0.8; // 전기가 들어간 점의 빛 크기
+const CURSOR_LIGHT_SCALE = 0.6; // 마우스 위 스파크 빛 크기 배율 (1이 원래 크기, 0.6이면 40% 작게)
 const SCREEN_FLASH = 0.18; // 화면 전체 번쩍임의 최대 밝기 (0~1, 0이면 없음)
 const LIGHT_POWER = 14; // 모기를 비추는 조명 세기
 const FLICKER_MS = 90; // 깜빡이는 간격(ms). 클수록 덜 번쩍인다
@@ -371,8 +372,8 @@ export function playElectric(mosquito) {
   // 커서 스파크: 빛 알갱이 + 짧게 튀는 번개 + 꼬리(혜성처럼 따라오는 빛).
   const texture = makeGlowTexture();
   const spark = new THREE.Group();
-  const core = makeGlow(texture, 0.7);
-  const halo = makeGlow(texture, 1.6);
+  const core = makeGlow(texture, 0.7 * CURSOR_LIGHT_SCALE);
+  const halo = makeGlow(texture, 1.6 * CURSOR_LIGHT_SCALE);
   const light = new THREE.PointLight(0xffe680, 6, 6);
   const mini = Array.from({ length: CURSOR_BOLTS }, makeBolt);
   mini.forEach((b) => {
@@ -477,7 +478,7 @@ export function playElectric(mosquito) {
       const power = hovering || transferStart !== null ? 1 : 0.45;
       core.material.opacity = 0.85 + 0.15 * Math.random();
       halo.material.opacity = (0.4 + 0.3 * Math.random()) * (0.6 + power * 0.6);
-      halo.scale.setScalar(1.3 + power * 0.9 + Math.random() * 0.3);
+      halo.scale.setScalar((1.3 + power * 0.9 + Math.random() * 0.3) * CURSOR_LIGHT_SCALE);
       light.intensity = 4 + power * 10 * Math.random();
       if (now - lastBolt > 55) {
         lastBolt = now;
