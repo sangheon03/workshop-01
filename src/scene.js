@@ -15,11 +15,12 @@ export function getScene() {
   if (current) return current;
 
   const canvas = document.getElementById('game-canvas');
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setClearColor(0x000000, 0);
   renderer.setPixelRatio(window.devicePixelRatio);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x10131a);
+  scene.background = null;
 
   const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
   camera.position.set(0, 0, 8);
