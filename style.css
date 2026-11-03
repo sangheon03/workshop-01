@@ -49,52 +49,130 @@ body {
   box-shadow: inset 0 0 120px rgba(8, 24, 60, 0.35);
 }
 
-/* 창틀: 크림색 반입체. 빛은 왼쪽 위에서 온다. 밝은 면, 그늘진 면, 유리 쪽으로 드리운 그림자로 두께를 표현한다. */
-.bg-frame {
-  position: absolute;
+/* 창틀: 아이보리 반입체. 빛은 왼쪽 위에서 온다.
+   세로·가로 틀을 교차점에서 네 팔(위·아래·왼·오른)로 나누고 각각 사선(마이터)으로 잘라 이어 붙인다.
+   각 팔은 밝은 면(아이보리) · 본면 · 그늘진 면(탄색)으로 두께를 표현한다. */
+:root {
+  --frame-w: 3vmin;
+  --frame-lit: #fffbe8;
+  --frame-face: #efe2b8;
+  --frame-shade: #b3a06a;
+  --frame-line: #8f7d4b;
 }
 
-/* 세로 틀: 왼쪽 가장자리는 그늘, 가운데는 크림 본면, 오른쪽에 빛 받는 밝은 띠 */
+.bg-frame {
+  position: absolute;
+  z-index: 2;
+}
+
+/* 유리 위에 드리운 틀 그림자. 틀들이 서로에게 그림자를 덮지 않도록 틀 아래 별도 층(z-index 1)으로 둔다. */
+#bg-window::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(
+      90deg,
+      transparent calc(50% - var(--frame-w) / 2),
+      rgba(8, 24, 70, 0.55) 0 calc(50% + var(--frame-w) / 2),
+      transparent 0
+    ),
+    linear-gradient(
+      180deg,
+      transparent calc(49% - var(--frame-w) / 2),
+      rgba(8, 24, 70, 0.55) 0 calc(49% + var(--frame-w) / 2),
+      transparent 0
+    );
+  filter: blur(6px);
+  transform: translate(4px, 6px);
+}
+
+.bg-frame::before,
+.bg-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+/* 세로 틀: 폭 --frame-w, 가로 틀과 만나는 곳은 화면 높이의 49% */
 .bg-frame-v {
   top: 0;
   bottom: 0;
-  left: calc(50% - 1.5vmin);
-  width: 3vmin;
-  background: linear-gradient(
-    90deg,
-    #c9bf98 0%,
-    #ece5c8 14%,
-    #f5efd8 46%,
-    #f5efd8 64%,
-    #fffdf2 64%,
-    #fffdf2 84%,
-    #d8cfae 100%
-  );
-  box-shadow:
-    inset 0 0 0 1px rgba(120, 105, 60, 0.25),
-    4px 0 10px rgba(10, 30, 80, 0.38),
-    -2px 0 6px rgba(10, 30, 80, 0.2);
+  left: calc(50% - var(--frame-w) / 2);
+  width: var(--frame-w);
 }
 
-/* 가로 틀: 위쪽은 빛 받는 면, 아래쪽은 그늘진 면. 아래 유리에 그림자가 길게 진다. */
+.bg-frame-v::before,
+.bg-frame-v::after {
+  background: linear-gradient(
+    90deg,
+    var(--frame-lit) 0 22%,
+    var(--frame-face) 22% 72%,
+    var(--frame-shade) 72% 100%
+  );
+}
+
+/* 위쪽 팔 */
+.bg-frame-v::before {
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% calc(49% - var(--frame-w) / 2),
+    50% 49%,
+    0 calc(49% - var(--frame-w) / 2)
+  );
+}
+
+/* 아래쪽 팔 */
+.bg-frame-v::after {
+  clip-path: polygon(
+    0 calc(49% + var(--frame-w) / 2),
+    50% 49%,
+    100% calc(49% + var(--frame-w) / 2),
+    100% 100%,
+    0 100%
+  );
+}
+
+/* 가로 틀: 높이 --frame-w, 세로 틀과 만나는 곳은 화면 너비의 50% */
 .bg-frame-h {
   left: 0;
   right: 0;
-  top: calc(49% - 1.5vmin);
-  height: 3vmin;
+  top: calc(49% - var(--frame-w) / 2);
+  height: var(--frame-w);
+}
+
+.bg-frame-h::before,
+.bg-frame-h::after {
   background: linear-gradient(
     180deg,
-    #fffdf2 0%,
-    #fffdf2 14%,
-    #f5efd8 14%,
-    #f0e9cd 60%,
-    #cfc59f 60%,
-    #bfb48c 100%
+    var(--frame-lit) 0 22%,
+    var(--frame-face) 22% 72%,
+    var(--frame-shade) 72% 100%
   );
-  box-shadow:
-    inset 0 0 0 1px rgba(120, 105, 60, 0.25),
-    0 6px 12px rgba(10, 30, 80, 0.42),
-    0 -2px 6px rgba(10, 30, 80, 0.15);
+}
+
+/* 왼쪽 팔 */
+.bg-frame-h::before {
+  clip-path: polygon(
+    0 0,
+    calc(50% - var(--frame-w) / 2) 0,
+    50% 50%,
+    calc(50% - var(--frame-w) / 2) 100%,
+    0 100%
+  );
+}
+
+/* 오른쪽 팔 */
+.bg-frame-h::after {
+  clip-path: polygon(
+    calc(50% + var(--frame-w) / 2) 0,
+    100% 0,
+    100% 100%,
+    calc(50% + var(--frame-w) / 2) 100%,
+    50% 50%
+  );
 }
 
 #game-canvas {
