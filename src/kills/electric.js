@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import { getScene } from '../scene.js';
 
 const BOLT_COUNT = 30;
-const BOLT_SEGMENTS = 9;
+const BOLT_SEGMENTS = 14;
 const BOLT_RADIUS = 3.4;
-// 번개 심지의 굵이(월드 단위, 뿌리 쪽 기준). 끝으로 갈수록 가늘어진다.
-const CORE_WIDTH = 0.11;
+// 번개 한 줄을 겹친 선 3개로 그려서 굵게 보이게 한다 (WebGL 선 굵기는 1px로 고정이라서).
+const BOLT_THICKNESS = 0.045;
 
 // "치직! 칙!! 치직!" 박자: 번쩍이는 구간(펄스)과 그 사이의 정적. 단위는 ms, power는 세기(0~1).
 // 뒤로 갈수록 더 세고, 펄스가 끝날 때마다 모기가 한 단계씩 더 까맣게 탄다.
@@ -16,6 +16,23 @@ const PULSES = [
   { at: 1700, length: 650, power: 1 },
 ];
 const FLICKER_MS = 40;
+const ORIGIN = new THREE.Vector3();
+
+// 모기에 손가락이 닿았다고 보는 반경(월드 단위). 파리채 판정과 같다.
+const TOUCH_RADIUS = 0.7;
+// 검지손가락으로 삿대질하는 손 모양 커서. 손가락 끝(32, 2)이 마우스 위치다.
+const FINGER_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <g fill="#f6cba5" stroke="#8a5a3b" stroke-width="2.5" stroke-linejoin="round">
+    <rect x="26" y="2" width="12" height="34" rx="6"/>
+    <rect x="14" y="30" width="38" height="30" rx="11"/>
+    <rect x="38" y="30" width="10" height="16" rx="5"/>
+    <rect x="46" y="34" width="8" height="14" rx="4"/>
+    <path d="M16 38 C6 36 4 46 12 50 L18 50 Z"/>
+  </g>
+  <path d="M30 14v14M34 14v14" stroke="#e8b38a" stroke-width="1.5" opacity=".6"/>
+</svg>`;
+const FINGER_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(FINGER_SVG)}") 32 2, pointer`;
 
 // 다 탄 뒤: 탄 모기 위로 회색 연기가 한 줄로 피어오른다.
 const SMOKE_START = 2400;
@@ -25,86 +42,55 @@ const SMOKE_LIFE_MS = 1400;
 const SMOKE_RISE = 2.6;
 const END_AT = 3900;
 
-// 번개 한 줄: 끝으로 갈수록 가늘어지는 노란 띠(심지) + 그 둘레의 은은한 빛 띠.
-// 띠는 카메라를 향한 평면에 그려서 선이 얇아지는 WebGL 한계를 피한다.
-function makeRibbon(material) {
+function makeBolt() {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute(
     'position',
-    new THREE.BufferAttribute(new Float32Array((BOLT_SEGMENTS + 1) * 2 * 3), 3),
+    new THREE.BufferAttribute(new Float32Array((BOLT_SEGMENTS + 1) * 3), 3),
   );
-  const index = [];
-  for (let i = 0; i < BOLT_SEGMENTS; i++) {
-    const a = i * 2;
-    index.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
-  }
-  geometry.setIndex(index);
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.frustumCulled = false;
-  return mesh;
-}
-
-function makeBolt() {
   const bolt = new THREE.Group();
-  const glow = makeRibbon(
-    new THREE.MeshBasicMaterial({
-      color: 0xffb800,
+  for (const color of [0xffee55, 0xffc400, 0xffc400]) {
+    const material = new THREE.LineBasicMaterial({
+      color,
       transparent: true,
-      opacity: 0.35,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      side: THREE.DoubleSide,
-    }),
-  );
-  const core = makeRibbon(
-    new THREE.MeshBasicMaterial({ color: 0xffe21a, side: THREE.DoubleSide, depthWrite: false }),
-  );
-  bolt.add(glow, core);
+    });
+    bolt.add(new THREE.Line(geometry, material));
+  }
   return bolt;
 }
 
-// 점들을 따라 띠를 채운다. 폭은 시작에서 끝으로 가며 줄어든다.
-function fillRibbon(mesh, points, startWidth, endWidth) {
-  const positions = mesh.geometry.attributes.position;
-  const last = points.length - 1;
-  for (let i = 0; i <= last; i++) {
-    const before = points[Math.max(i - 1, 0)];
-    const after = points[Math.min(i + 1, last)];
-    // 진행 방향에 수직인 화면 평면 방향으로 양옆을 벌린다.
-    const nx = -(after.y - before.y);
-    const ny = after.x - before.x;
-    const len = Math.hypot(nx, ny) || 1;
-    const half = (startWidth + (endWidth - startWidth) * (i / last)) / 2;
-    const ox = (nx / len) * half;
-    const oy = (ny / len) * half;
-    positions.setXYZ(i * 2, points[i].x + ox, points[i].y + oy, points[i].z);
-    positions.setXYZ(i * 2 + 1, points[i].x - ox, points[i].y - oy, points[i].z);
-  }
-  positions.needsUpdate = true;
-}
-
-const boltPoints = Array.from({ length: BOLT_SEGMENTS + 1 }, () => new THREE.Vector3());
-
-// 모기에서 바깥쪽으로 뻗는 번개를 새로 그린다. 길이는 reach(0~1)에 비례한다.
-// 마디마다 좌우로 번갈아 꺾어서 뾰족뾰족한 번개 모양을 만든다.
+// 모기에서 바깥쪽으로 뻗는 들쭉날쭉한 번개를 새로 그린다. 길이는 reach(0~1)에 비례한다.
 function redrawBolt(bolt, reach) {
-  // 화면 평면(XY) 방향을 주로 쓰고, 깊이 방향은 조금만 섞는다.
-  const angle = Math.random() * Math.PI * 2;
-  const dir = new THREE.Vector3(Math.cos(angle), Math.sin(angle), (Math.random() - 0.5) * 0.4);
-  const side = new THREE.Vector3(-dir.y, dir.x, 0);
+  const positions = bolt.children[0].geometry.attributes.position;
+  const dir = new THREE.Vector3(
+    Math.random() - 0.5,
+    Math.random() - 0.5,
+    Math.random() - 0.5,
+  ).normalize();
   const radius = BOLT_RADIUS * (0.5 + 0.5 * reach) * (0.55 + Math.random() * 0.45);
-  const jitter = (0.35 + 0.3 * reach) * (BOLT_RADIUS / BOLT_SEGMENTS) * 2;
-  let sign = Math.random() < 0.5 ? 1 : -1;
+  const jitter = 0.3 + 0.35 * reach;
   for (let i = 0; i <= BOLT_SEGMENTS; i++) {
     const d = (i / BOLT_SEGMENTS) * radius;
-    // 뿌리는 모기에 붙어 있고, 마디마다 반대쪽으로 꺾인다.
-    const bend = i === 0 ? 0 : sign * jitter * (0.4 + Math.random() * 0.6);
-    sign = -sign;
-    boltPoints[i].copy(dir).multiplyScalar(d).addScaledVector(side, bend);
+    const wobble = i === 0 ? 0 : jitter;
+    positions.setXYZ(
+      i,
+      dir.x * d + (Math.random() - 0.5) * wobble,
+      dir.y * d + (Math.random() - 0.5) * wobble,
+      dir.z * d + (Math.random() - 0.5) * wobble,
+    );
   }
-  const [glow, core] = bolt.children;
-  fillRibbon(glow, boltPoints, CORE_WIDTH * 3, CORE_WIDTH * 1);
-  fillRibbon(core, boltPoints, CORE_WIDTH, CORE_WIDTH * 0.25);
+  positions.needsUpdate = true;
+  // 가운데 선은 그대로, 나머지 둘은 살짝 비켜 놓아 굵어 보이게 한다.
+  bolt.children.forEach((line, i) => {
+    if (i === 0) return;
+    line.position.set(
+      (Math.random() - 0.5) * BOLT_THICKNESS * 2,
+      (Math.random() - 0.5) * BOLT_THICKNESS * 2,
+      (Math.random() - 0.5) * BOLT_THICKNESS * 2,
+    );
+  });
 }
 
 // 가운데가 밝고 가장자리로 퍼지는 빛 무리 텍스처.
@@ -115,9 +101,9 @@ function makeGlowTexture() {
   canvas.height = size;
   const ctx = canvas.getContext('2d');
   const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  gradient.addColorStop(0, 'rgba(255,255,255,1)');
-  gradient.addColorStop(0.25, 'rgba(160,215,255,0.75)');
-  gradient.addColorStop(1, 'rgba(80,160,255,0)');
+  gradient.addColorStop(0, 'rgba(255,250,200,1)');
+  gradient.addColorStop(0.25, 'rgba(255,225,80,0.75)');
+  gradient.addColorStop(1, 'rgba(255,170,0,0)');
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, size, size);
   return new THREE.CanvasTexture(canvas);
@@ -160,7 +146,8 @@ function activePulse(ms) {
   return PULSES.findIndex((p) => ms >= p.at && ms < p.at + p.length);
 }
 
-export function playElectric(mosquito) {
+// 전기가 튀는 연출 본체. 손가락 끝(모기 기준 좌표)은 getFingerLocal()로 받는다.
+function shock(mosquito, getFingerLocal) {
   const { group } = mosquito;
   const { camera } = getScene();
 
@@ -175,7 +162,7 @@ export function playElectric(mosquito) {
   const startColors = meshes.map((m) => m.material.color.clone());
   const black = new THREE.Color(0x000000);
 
-  const flash = new THREE.PointLight(0xbfe6ff, 0, 30);
+  const flash = new THREE.PointLight(0xffe680, 0, 30);
   group.add(flash);
   const bolts = Array.from({ length: BOLT_COUNT }, makeBolt);
   bolts.forEach((b) => {
@@ -187,7 +174,9 @@ export function playElectric(mosquito) {
   const glowTexture = makeGlowTexture();
   const glowNear = makeGlow(glowTexture, 4);
   const glowFar = makeGlow(glowTexture, 9);
-  group.add(glowNear, glowFar);
+  // 손가락 끝에서도 작게 번쩍인다.
+  const glowFinger = makeGlow(glowTexture, 1.8);
+  group.add(glowNear, glowFar, glowFinger);
 
   const smoke = makeSmoke();
   group.add(...smoke);
@@ -200,7 +189,7 @@ export function playElectric(mosquito) {
   Object.assign(overlay.style, {
     position: 'fixed',
     inset: '0',
-    background: `radial-gradient(circle at ${px}px ${py}px, rgba(235,248,255,0.95) 0%, rgba(150,210,255,0.55) 30%, rgba(80,150,255,0) 70%)`,
+    background: `radial-gradient(circle at ${px}px ${py}px, rgba(255,250,215,0.95) 0%, rgba(255,215,90,0.55) 30%, rgba(255,170,0,0) 70%)`,
     opacity: '0',
     pointerEvents: 'none',
     zIndex: '5',
@@ -224,6 +213,7 @@ export function playElectric(mosquito) {
       overlay.style.opacity = '0';
       glowNear.material.opacity = 0;
       glowFar.material.opacity = 0;
+      glowFinger.material.opacity = 0;
       bolts.forEach((b) => {
         b.visible = false;
       });
@@ -250,9 +240,16 @@ export function playElectric(mosquito) {
           glowFar.material.opacity = on ? (0.25 + 0.45 * power) * Math.random() : 0;
           glowNear.scale.setScalar(3.5 + power * 2.5 * Math.random());
           glowFar.scale.setScalar(8 + power * 5 * Math.random());
-          bolts.forEach((b) => {
+          // 3줄 중 1줄은 손가락 끝에서 짧게 튀고, 나머지는 모기에서 뻗는다.
+          const finger = getFingerLocal();
+          glowFinger.position.copy(finger);
+          glowFinger.material.opacity = on ? 0.8 + 0.2 * Math.random() : 0.2;
+          bolts.forEach((b, i) => {
             b.visible = Math.random() < 0.7 + power * 0.3;
-            if (b.visible) redrawBolt(b, power);
+            if (!b.visible) return;
+            const fromFinger = i % 3 === 0;
+            b.position.copy(fromFinger ? finger : ORIGIN);
+            redrawBolt(b, fromFinger ? power * 0.55 : power);
           });
         }
         // 경련: 펄스가 셀수록 크게 떤다.
@@ -305,15 +302,13 @@ export function playElectric(mosquito) {
       group.position.copy(origin);
       group.rotation.z = originRotZ;
       setDarkness(0.97);
-      group.remove(flash, glowNear, glowFar, ...bolts, ...smoke);
+      group.remove(flash, glowNear, glowFar, glowFinger, ...bolts, ...smoke);
       overlay.remove();
       glowTexture.dispose();
-      [glowNear, glowFar].forEach((g) => g.material.dispose());
+      [glowNear, glowFar, glowFinger].forEach((g) => g.material.dispose());
       bolts.forEach((b) => {
-        b.children.forEach((ribbon) => {
-          ribbon.geometry.dispose();
-          ribbon.material.dispose();
-        });
+        b.children[0].geometry.dispose();
+        b.children.forEach((line) => line.material.dispose());
       });
       smoke.forEach((p) => {
         p.geometry.dispose();
@@ -322,5 +317,59 @@ export function playElectric(mosquito) {
       resolve();
     };
     requestAnimationFrame(tick);
+  });
+}
+
+// 손가락 커서를 모기에 가져다 대면 전기충격이 일어난다.
+export function playElectric(mosquito) {
+  const { group } = mosquito;
+  const { camera } = getScene();
+  const canvas = document.getElementById('game-canvas');
+
+  const raycaster = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  const sphere = new THREE.Sphere(group.position.clone(), TOUCH_RADIUS);
+  // 손가락 끝이 가리키는 곳을 모기가 있는 깊이의 평면 위 월드 좌표로 바꾼다.
+  const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -group.position.z);
+  const tip = group.position.clone();
+  const fingerLocal = new THREE.Vector3();
+  let started = false;
+
+  const aim = (event) => {
+    ndc.set((event.clientX / window.innerWidth) * 2 - 1, -(event.clientY / window.innerHeight) * 2 + 1);
+    raycaster.setFromCamera(ndc, camera);
+    raycaster.ray.intersectPlane(plane, tip);
+    return raycaster.ray.intersectsSphere(sphere);
+  };
+
+  const hint = document.createElement('p');
+  hint.className = 'hint';
+  Object.assign(hint.style, {
+    position: 'fixed',
+    left: '50%',
+    bottom: '90px',
+    transform: 'translateX(-50%)',
+    pointerEvents: 'none',
+    zIndex: '5',
+  });
+  hint.textContent = '손가락을 모기에 가져다 대세요!';
+  document.body.appendChild(hint);
+  const previousCursor = canvas.style.cursor;
+  canvas.style.cursor = FINGER_CURSOR;
+
+  return new Promise((resolve) => {
+    // 손가락 끝은 연출 중에도 계속 따라간다. 처음 닿는 순간 전기충격을 시작한다.
+    const onMove = (event) => {
+      const touching = aim(event);
+      if (started || !touching) return;
+      started = true;
+      hint.remove();
+      shock(mosquito, () => fingerLocal.copy(tip).sub(sphere.center)).then(() => {
+        window.removeEventListener('pointermove', onMove);
+        canvas.style.cursor = previousCursor;
+        resolve();
+      });
+    };
+    window.addEventListener('pointermove', onMove);
   });
 }
