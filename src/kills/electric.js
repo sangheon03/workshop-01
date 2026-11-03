@@ -1,9 +1,19 @@
 import * as THREE from 'three';
 import { getScene } from '../scene.js';
 
+// ===== 직접 조절하는 값 (숫자만 바꾸고 저장한 뒤 브라우저를 새로고침하면 된다) =====
+// 번쩍임이 너무 크거나 눈부시면 숫자를 줄이고, 약하면 늘린다.
+const BOLT_RADIUS = 2.6; // 번개가 뻗는 최대 길이
+const GLOW_NEAR_SIZE = 1.6; // 모기 바로 둘레 빛 무리 크기
+const GLOW_FAR_SIZE = 3.4; // 넓게 퍼지는 빛 무리 크기
+const GLOW_ENTRY_SIZE = 0.8; // 전기가 들어간 점의 빛 크기
+const SCREEN_FLASH = 0.18; // 화면 전체 번쩍임의 최대 밝기 (0~1, 0이면 없음)
+const LIGHT_POWER = 14; // 모기를 비추는 조명 세기
+const FLICKER_MS = 90; // 깜빡이는 간격(ms). 클수록 덜 번쩍인다
+// ===================================================================
+
 const BOLT_COUNT = 30;
 const BOLT_SEGMENTS = 14;
-const BOLT_RADIUS = 3.4;
 // 번개 한 줄을 겹친 선 3개로 그려서 굵게 보이게 한다 (WebGL 선 굵기는 1px로 고정이라서).
 const BOLT_THICKNESS = 0.045;
 
@@ -15,7 +25,6 @@ const PULSES = [
   { at: 1250, length: 220, power: 0.95 },
   { at: 1700, length: 650, power: 1 },
 ];
-const FLICKER_MS = 40;
 const ORIGIN = new THREE.Vector3();
 
 // 모기를 클릭했다고 보는 반경(월드 단위). 파리채 판정과 같다.
@@ -165,10 +174,10 @@ function shock(mosquito, getEntryLocal) {
 
   // 모기 주변이 넓게 번쩍이도록 빛 무리를 겹쳐 둔다.
   const glowTexture = makeGlowTexture();
-  const glowNear = makeGlow(glowTexture, 4);
-  const glowFar = makeGlow(glowTexture, 9);
+  const glowNear = makeGlow(glowTexture, GLOW_NEAR_SIZE);
+  const glowFar = makeGlow(glowTexture, GLOW_FAR_SIZE);
   // 전기가 들어가는 점에서도 작게 번쩍인다.
-  const glowEntry = makeGlow(glowTexture, 1.8);
+  const glowEntry = makeGlow(glowTexture, GLOW_ENTRY_SIZE);
   group.add(glowNear, glowFar, glowEntry);
 
   const smoke = makeSmoke();
@@ -227,12 +236,12 @@ function shock(mosquito, getEntryLocal) {
         if (now - lastFlicker > FLICKER_MS) {
           lastFlicker = now;
           const on = Math.random() < 0.85;
-          flash.intensity = on ? 20 + power * 50 * Math.random() : 0;
-          overlay.style.opacity = on ? String(0.25 + power * 0.55 * Math.random()) : '0';
-          glowNear.material.opacity = on ? 0.7 + 0.3 * Math.random() : 0.1;
-          glowFar.material.opacity = on ? (0.25 + 0.45 * power) * Math.random() : 0;
-          glowNear.scale.setScalar(3.5 + power * 2.5 * Math.random());
-          glowFar.scale.setScalar(8 + power * 5 * Math.random());
+          flash.intensity = on ? LIGHT_POWER * (0.4 + 0.6 * power * Math.random()) : 0;
+          overlay.style.opacity = on ? String(SCREEN_FLASH * (0.3 + 0.7 * power * Math.random())) : '0';
+          glowNear.material.opacity = on ? 0.5 + 0.3 * Math.random() : 0.1;
+          glowFar.material.opacity = on ? (0.15 + 0.25 * power) * Math.random() : 0;
+          glowNear.scale.setScalar(GLOW_NEAR_SIZE * (0.8 + 0.4 * power * Math.random()));
+          glowFar.scale.setScalar(GLOW_FAR_SIZE * (0.8 + 0.4 * power * Math.random()));
           // 3줄 중 1줄은 전기가 들어간 점에서 짧게 튀고, 나머지는 모기에서 뻗는다.
           const entryPoint = getEntryLocal();
           glowEntry.position.copy(entryPoint);
