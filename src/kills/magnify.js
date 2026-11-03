@@ -11,13 +11,13 @@ const FOCUS_LENGTH = Math.hypot(FOCUS_DROP, LENS_FRONT);
 const MAX_TILT = 0.5;
 const INTRO_MS = 800;
 const OUTRO_MS = 450;
-// 초점이 모기에서 이 거리(월드 단위) 안으로 들어와야 빛이 모이기 시작한다.
+// 초점이 모기에서 이 거리(월드 단위) 안으로 들어오면 그 모기에 빛이 모인다.
 const FOCUS_RANGE = 1.1;
-// 초점을 맞춰 이만큼(초) 비추면 다 탄다.
-const BURN_SECONDS = 2.2;
+// 초점이 모기에 닿아 있는 동안 이 시간(ms)마다 한 번씩 피해를 준다. 피해량은 2단계가 정한다 (지금은 HP -5).
+const HIT_MS = 300;
+// 한 번 맞을 때마다 그 모기가 더 까맣게 타는 정도 (0~1). HP -5가 100 중 5%인 것과 맞춘다.
+const BURN_PER_HIT = 0.05;
 const SMOKE_COUNT = 18;
-// 초점이 닿은 모기의 열이 이 값을 넘으면 그 모기가 이번 처치의 대상으로 정해진다 (그 뒤에는 취소할 수 없다).
-const COMMIT_HEAT = 0.2;
 const ORANGE = 0xff7a00;
 const HEAT = new THREE.Color(0xff4a10);
 
@@ -78,40 +78,38 @@ function makeSmoke() {
 
 const easeOut = (x) => 1 - (1 - x) ** 3;
 
-// candidates: 고를 수 있는 모기들(한 마리 객체도 가능). 돋보기 초점을 모아 달아오르기 시작한 모기가 대상이 된다.
-// options.onCommit(mosquito): 대상이 정해진 순간 부른다 (그 뒤에는 취소할 수 없다).
-// options.signal: 대상이 정해지기 전에 abort하면 정리하고 null을 돌려준다.
-// 다 태우면 대상이었던 모기를 돌려준다.
-export function playMagnify(candidates, { signal, onCommit } = {}) {
-  const list = [].concat(candidates).filter(Boolean);
-  if (list.length === 0 || signal?.aborted) return Promise.resolve(null);
-  const world = list[0].group.parent;
+// 돋보기 도구. 켜 두면 렌즈를 마우스로 움직여 빛을 모으고, 초점이 닿은 모기가 HIT_MS마다 한 번씩 피해를 받는다 (지속 피해).
+// 렌즈를 다른 모기로 옮기면 그 모기가 맞는다. 끝나는 조건은 따로 없고, signal을 abort하면 렌즈가 사라지며 끝난다.
+// getTargets(): 지금 태울 수 있는 (살아 있는) 모기 배열을 돌려주는 함수. 매 프레임 부른다.
+// onHit(mosquito): 피해를 줄 때마다 그 모기를 알려 준다. 피해량은 2단계가 정한다.
+export function playMagnify({ getTargets, onHit, signal } = {}) {
+  const initial = getTargets();
+  if (initial.length === 0 || signal?.aborted) return Promise.resolve();
+  const world = initial[0].group.parent;
   const { camera } = getScene();
   const canvas = document.getElementById('game-canvas');
   const black = new THREE.Color(0x000000);
 
-  // 재질은 모기마다 공유되므로 복제해서 쓴다. 안 그러면 다음 판 모기도 타 버린 색으로 나온다.
-  // 후보 모기마다 열(heat)과 색을 따로 가진다.
-  const entries = list.map((mosquito) => {
-    const meshes = [];
-    mosquito.group.traverse((obj) => {
-      if (obj.isMesh) meshes.push(obj);
-    });
-    meshes.forEach((m) => {
-      m.material = m.material.clone();
-    });
-    return {
-      mosquito,
-      center: mosquito.group.position.clone(),
-      meshes,
-      startColors: meshes.map((m) => m.material.color.clone()),
-      heat: 0, // 0~1, 1이면 다 탄 것
-    };
-  });
-  // 초점이 가장 가까운 모기(대상이 정해진 뒤에는 그 모기). 처음에는 첫 번째.
-  let current = entries[0];
-  let committed = null;
-  const middle = entries.reduce((sum, e) => sum.add(e.center), new THREE.Vector3()).divideScalar(entries.length);
+  // 모기마다 탄 정도(burn)와 색을 따로 가진다. 재질은 모기마다 공유되므로 처음 쓸 때 복제한다.
+  // 안 그러면 다음 판 모기도 타 버린 색으로 나온다.
+  const entries = new Map();
+  const entryOf = (mosquito) => {
+    let entry = entries.get(mosquito);
+    if (!entry) {
+      const meshes = [];
+      mosquito.group.traverse((obj) => {
+        if (obj.isMesh) meshes.push(obj);
+      });
+      meshes.forEach((m) => {
+        m.material = m.material.clone();
+      });
+      entry = { mosquito, meshes, startColors: meshes.map((m) => m.material.color.clone()), burn: 0 };
+      entries.set(mosquito, entry);
+    }
+    return entry;
+  };
+  initial.forEach(entryOf);
+  const middle = initial.reduce((sum, m) => sum.add(m.group.position), new THREE.Vector3()).divideScalar(initial.length);
 
   const { lens } = makeLens();
   const beam = makeBeam();
@@ -151,7 +149,7 @@ export function playMagnify(candidates, { signal, onCommit } = {}) {
     pointerEvents: 'none',
     zIndex: '5',
   });
-  hint.textContent = '돋보기를 움직여 태우고 싶은 모기에 빛을 모으세요!';
+  hint.textContent = '돋보기를 움직여 빛을 모으세요! 닿아 있는 모기는 0.3초마다 HP -5 (다른 모기로 옮겨도 돼요)';
   document.body.appendChild(hint);
   const previousCursor = canvas.style.cursor;
   canvas.style.cursor = 'none';
@@ -168,33 +166,19 @@ export function playMagnify(candidates, { signal, onCommit } = {}) {
   const introQuat = new THREE.Quaternion();
   let tiltYaw = 0;
   let tiltPitch = 0;
-  const startTwitch = 1;
   let smokeClock = 0;
-  let outroAt = null;
+  let hitClock = 0; // 지금 초점이 닿은 모기를 얼마나(ms) 비췄는지
+  let focused = null; // 지금 초점이 닿아 있는 모기
+  let outroAt = null; // 끄는 중이면 시작 시각
 
   return new Promise((resolve) => {
     const start = performance.now();
     let last = start;
 
-    let cancelled = false;
-    // 대상이 정해지기 전에는 취소할 수 있다. 달아오르던 색은 되돌린다.
-    signal?.addEventListener(
-      'abort',
-      () => {
-        if (committed || cancelled) return;
-        cancelled = true;
-        for (const e of entries) {
-          e.meshes.forEach((m, i) => {
-            m.material.color.copy(e.startColors[i]);
-            m.material.emissive?.setScalar(0);
-          });
-          e.mosquito.setTwitch?.(1);
-        }
-        cleanup();
-        resolve(null);
-      },
-      { once: true },
-    );
+    const stop = () => {
+      if (outroAt === null) outroAt = performance.now();
+    };
+    signal?.addEventListener('abort', stop, { once: true });
 
     const cleanup = () => {
       window.removeEventListener('pointermove', onMove);
@@ -210,7 +194,6 @@ export function playMagnify(candidates, { signal, onCommit } = {}) {
     };
 
     const tick = (now) => {
-      if (cancelled) return;
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
       const ms = now - start;
@@ -241,24 +224,37 @@ export function playMagnify(candidates, { signal, onCommit } = {}) {
         ),
       );
 
-      // 초점: 렌즈에서 빛줄기 축 반대 방향으로 일정 거리 떨어진 점.
+      // 초점: 렌즈에서 빛줄기 축 반대 방향으로 일정 거리 떨어진 점. 가장 가까운 모기에 빛이 모인다.
       focus.copy(lensPos).addScaledVector(axis, -FOCUS_LENGTH);
-      // 대상이 정해지기 전에는 초점에 가장 가까운 모기가 현재 모기다.
-      if (!committed && introDone) {
-        let nearest = current;
-        let nearestDistance = Infinity;
-        for (const e of entries) {
-          const d = focus.distanceTo(e.center);
-          if (d < nearestDistance) {
-            nearest = e;
-            nearestDistance = d;
-          }
+      let nearest = null;
+      let nearestDistance = Infinity;
+      for (const mosquito of getTargets()) {
+        const d = focus.distanceTo(mosquito.group.position);
+        if (d < nearestDistance) {
+          nearest = mosquito;
+          nearestDistance = d;
         }
-        current = nearest;
       }
-      const { center } = current;
-      const distance = focus.distanceTo(center);
-      const closeness = introDone && outroAt === null ? 1 - THREE.MathUtils.clamp(distance / FOCUS_RANGE, 0, 1) : 0;
+      const closeness =
+        nearest && introDone && outroAt === null ? 1 - THREE.MathUtils.clamp(nearestDistance / FOCUS_RANGE, 0, 1) : 0;
+      const hitting = closeness > 0.2 ? nearest : null;
+
+      // 지속 피해: 초점이 한 모기에 닿아 있는 동안 HIT_MS마다 한 번씩 피해를 준다. 다른 모기로 옮기면 처음부터 다시 잰다.
+      if (hitting !== focused) {
+        focused?.setTwitch?.(1);
+        focused = hitting;
+        hitClock = 0;
+        focused?.setTwitch?.(3);
+      }
+      if (focused) {
+        hitClock += dt * 1000;
+        while (hitClock >= HIT_MS) {
+          hitClock -= HIT_MS;
+          const entry = entryOf(focused);
+          entry.burn = Math.min(1, entry.burn + BURN_PER_HIT);
+          onHit?.(focused);
+        }
+      }
 
       // 렌즈에서 초점까지 원뿔 빛을 늘여 붙인다. 초점이 모기에 가까울수록 밝다.
       down.copy(lensPos).sub(focus);
@@ -274,42 +270,23 @@ export function playMagnify(candidates, { signal, onCommit } = {}) {
       glow.position.set(focus.x, focus.y, focus.z + 0.6);
       glow.intensity = closeness * 12 * (1 - outro);
 
-      // 초점이 모기에 머무르는 동안 달아오르고, 벗어나면 조금씩 식는다. 현재 모기가 아닌 후보는 식는다.
-      if (outroAt === null) {
-        for (const e of entries) {
-          if (e === current) {
-            e.heat += closeness > 0.2 ? (closeness * dt) / BURN_SECONDS : -dt * 0.15;
-          } else if (!committed) {
-            e.heat -= dt * 0.3;
-          } else {
-            e.heat = 0;
-          }
-          e.heat = THREE.MathUtils.clamp(e.heat, 0, 1);
-          e.mosquito.setTwitch?.(startTwitch + e.heat * 3);
-        }
-        // 달아오르기 시작한 모기가 이번 처치의 대상으로 정해진다.
-        if (!committed && current.heat > COMMIT_HEAT) {
-          committed = current;
-          onCommit?.(committed.mosquito);
-        }
-      }
-      for (const e of entries) {
-        e.meshes.forEach((m, i) => {
-          m.material.color.lerpColors(e.startColors[i], black, e.heat * 0.95);
-          // 붉게 달아올랐다가 식으면서 까맣게 탄다.
-          m.material.emissive?.copy(HEAT).multiplyScalar(Math.sin(Math.min(e.heat * 1.2, 1) * Math.PI) * 0.9);
+      // 맞은 만큼 까맣게 타고, 지금 빛을 받는 모기는 붉게 달아오른다.
+      for (const entry of entries.values()) {
+        entry.meshes.forEach((m, i) => {
+          m.material.color.lerpColors(entry.startColors[i], black, entry.burn * 0.95);
+          const glowing = entry.mosquito === focused ? 0.35 + 0.55 * closeness : 0;
+          m.material.emissive?.copy(HEAT).multiplyScalar(glowing);
         });
       }
-      const heat = current.heat;
 
-      // 연기: 달아오른 동안 모기에서 하나씩 올라간다.
+      // 연기: 빛을 받는 동안 그 모기에서 하나씩 올라간다.
       smokeClock += dt;
-      if (heat > 0.25 && smokeClock > 0.12) {
+      if (focused && smokeClock > 0.12) {
         smokeClock = 0;
         const idle = smoke.find((p) => p.userData.life >= 1);
         if (idle) {
           idle.userData.life = 0;
-          idle.userData.base = center
+          idle.userData.base = focused.group.position
             .clone()
             .add(new THREE.Vector3((Math.random() - 0.5) * 0.5, 0.1, (Math.random() - 0.5) * 0.5));
         }
@@ -327,18 +304,18 @@ export function playMagnify(candidates, { signal, onCommit } = {}) {
         p.scale.setScalar(1 + k * 2);
       }
 
-      if (heat >= 1 && outroAt === null) outroAt = now;
-
       if (outro < 1) {
         requestAnimationFrame(tick);
         return;
       }
 
-      // 타 버린 모기는 장면에 까맣게 남겨 둔다 (결과 화면이 캡처한다). 효과만 치운다.
-      entries.forEach((e) => e.meshes.forEach((m) => m.material.emissive?.setScalar(0)));
-      entries.forEach((e) => e.mosquito.setTwitch?.(1));
+      // 끝: 탄 색은 남기고 효과(렌즈·빛·연기)만 치운다.
+      entries.forEach((entry) => {
+        entry.meshes.forEach((m) => m.material.emissive?.setScalar(0));
+        entry.mosquito.setTwitch?.(1);
+      });
       cleanup();
-      resolve(committed.mosquito);
+      resolve();
     };
     requestAnimationFrame(tick);
   });
