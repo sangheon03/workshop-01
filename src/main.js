@@ -25,16 +25,14 @@ export function resetGame() {
 }
 
 function startGame() {
-  const startedAt = performance.now();
   showScreen('stage1');
   startStage1({
     onCaught: (mosquito) => {
-      const seconds = (performance.now() - startedAt) / 1000;
       currentMosquito = mosquito;
       stopStage1();
       showScreen('stage2');
       startStage2(mosquito, {
-        onDone: (methodId) => showResult({ seconds, methodId }),
+        onDone: (methodIds) => showResult({ methodIds, mosquito }),
       });
     },
   });

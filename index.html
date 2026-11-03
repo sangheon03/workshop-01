@@ -16,6 +16,30 @@
   </script>
 </head>
 <body>
+  <!-- 3D 캔버스 뒤에 깔리는 유리창 배경 (배경 레퍼런스 참고). 캔버스가 투명해야 보인다. -->
+  <div id="bg-window" aria-hidden="true">
+    <div class="bg-sky"></div>
+    <div class="bg-sea"></div>
+    <svg class="bg-scenery" viewBox="0 0 300 375" preserveAspectRatio="xMidYMid slice">
+      <g fill="#fff" opacity="0.85">
+        <rect x="52" y="104" width="10" height="2" rx="1"/>
+        <rect x="84" y="133" width="16" height="2" rx="1"/>
+        <rect x="120" y="143" width="20" height="2" rx="1"/>
+        <rect x="42" y="164" width="26" height="3" rx="1.5"/>
+        <rect x="0" y="152" width="8" height="2" rx="1"/>
+        <rect x="172" y="156" width="8" height="2" rx="1"/>
+      </g>
+      <g transform="translate(40 242)">
+        <polygon points="18,0 18,28 4,28" fill="#fff"/>
+        <polygon points="21,6 21,28 32,28" fill="#f2f6fb"/>
+        <polygon points="0,31 36,31 31,36 6,36" fill="#fff"/>
+      </g>
+    </svg>
+    <div class="bg-glass"></div>
+    <div class="bg-frame bg-frame-v"></div>
+    <div class="bg-frame bg-frame-h"></div>
+  </div>
+
   <canvas id="game-canvas"></canvas>
 
   <section id="screen-start" class="screen active">
@@ -33,8 +57,8 @@
   </section>
 
   <section id="screen-result" class="screen">
+    <img id="result-mosquito" alt="죽은 모기" hidden>
     <h1>결과</h1>
-    <p>잡는 데 걸린 시간: <strong id="result-time">-</strong></p>
     <p>처치 방법: <strong id="result-method">-</strong></p>
     <button id="btn-retry" type="button">다시하기</button>
   </section>
