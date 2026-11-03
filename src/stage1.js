@@ -4,11 +4,13 @@ import { createMosquito } from './mosquito.js';
 import { enableSwatter, disableSwatter } from './swatter.js';
 
 const SPEED = 3;
+const REF_DEPTH = 8; // 카메라와의 기준 거리. 가까울수록 느리게, 멀수록 빠르게 보정한다.
 const TURN_RATE = 6;
 const WING_FLAP_HZ = 35;
 const WING_FLAP_ANGLE = 0.6;
 const MARGIN = 0.8;
-const Z_RANGE = [-2, 2];
+// 카메라(z=8)와의 거리 약 3.5~14. 가까이 올 때 크게, 멀어질 때 작게 보이되 화면을 다 가리지는 않는다.
+const Z_RANGE = [-6, 4.5];
 
 let mosquito = null;
 let target = new THREE.Vector3();
@@ -45,7 +47,10 @@ function tick(now) {
   if (dist < 0.3) {
     pickTarget();
   } else {
-    group.position.addScaledVector(toTarget.normalize(), Math.min(SPEED * dt, dist));
+    // 깊이에 따라 속도를 보정해서, 화면에서 보이는 움직임이 비슷하게 느껴지게 한다.
+    const { camera } = getScene();
+    const depthScale = THREE.MathUtils.clamp(Math.abs(camera.position.z - group.position.z) / REF_DEPTH, 0.5, 1.5);
+    group.position.addScaledVector(toTarget.normalize(), Math.min(SPEED * depthScale * dt, dist));
     lookMatrix.lookAt(target, group.position, up);
     lookQuat.setFromRotationMatrix(lookMatrix);
     group.quaternion.slerp(lookQuat, Math.min(TURN_RATE * dt, 1));
