@@ -51,7 +51,7 @@ body {
 
 .bg-frame {
   position: absolute;
-  background: #232323;
+  background: #fffff0; /* 아이보리 */
   box-shadow: 0 0 14px rgba(0, 0, 0, 0.35);
 }
 
