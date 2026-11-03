@@ -5,6 +5,10 @@ import { getScene } from '../scene.js';
 const LENS_RADIUS = 0.9;
 const LENS_FRONT = 1.3;
 const FOCUS_DROP = 1.7;
+// 렌즈에서 초점까지 거리. 처음 놓인 자리(위로 FOCUS_DROP, 앞으로 LENS_FRONT)와 같은 길이다.
+const FOCUS_LENGTH = Math.hypot(FOCUS_DROP, LENS_FRONT);
+// 움직임에 따라 렌즈가 기울어지는 최대 각도(라디안).
+const MAX_TILT = 0.5;
 const INTRO_MS = 800;
 const OUTRO_MS = 450;
 // 초점이 모기에서 이 거리(월드 단위) 안으로 들어와야 빛이 모이기 시작한다.
@@ -30,12 +34,12 @@ function makeLens() {
   );
   const rim = new THREE.Mesh(
     new THREE.TorusGeometry(LENS_RADIUS, 0.1, 16, 48),
-    new THREE.MeshBasicMaterial({ color: ORANGE }),
+    new THREE.MeshStandardMaterial({ color: ORANGE, roughness: 0.35, metalness: 0.1 }),
   );
   // 손잡이: 테두리에서 오른쪽 아래(-35도)로 뻗는다.
   const handle = new THREE.Mesh(
     new THREE.CapsuleGeometry(0.1, 1.1, 8, 16),
-    new THREE.MeshBasicMaterial({ color: 0xff6200 }),
+    new THREE.MeshStandardMaterial({ color: 0xff6200, roughness: 0.4, metalness: 0.1 }),
   );
   const angle = -0.62;
   const reach = LENS_RADIUS + 0.55;
@@ -136,6 +140,15 @@ export function playMagnify(mosquito) {
   const focus = new THREE.Vector3();
   const down = new THREE.Vector3();
   const up = new THREE.Vector3(0, 1, 0);
+  const forward = new THREE.Vector3(0, 0, 1);
+  const baseAxis = new THREE.Vector3(0, FOCUS_DROP, LENS_FRONT).normalize();
+  const axis = new THREE.Vector3();
+  const prevPos = new THREE.Vector3();
+  const tiltEuler = new THREE.Euler();
+  const introEuler = new THREE.Euler();
+  const introQuat = new THREE.Quaternion();
+  let tiltYaw = 0;
+  let tiltPitch = 0;
   const startTwitch = 1;
   let heat = 0; // 0~1, 1이면 다 탄 것
   let smokeClock = 0;
@@ -168,14 +181,29 @@ export function playMagnify(mosquito) {
       const introDone = ms >= INTRO_MS;
       const outro = outroAt === null ? 0 : Math.min((now - outroAt) / OUTRO_MS, 1);
 
+      prevPos.copy(lensPos);
       if (introDone) lensPos.lerp(target, 0.25);
       else lensPos.copy(aimed);
       lens.position.copy(lensPos);
-      lens.rotation.z = (1 - intro) * 1.1;
       lens.scale.setScalar((0.2 + 0.8 * intro) * (1 - outro));
 
-      // 초점: 렌즈 아래, 모기가 있는 평면 위의 점.
-      focus.set(lensPos.x, lensPos.y - FOCUS_DROP, center.z);
+      // 렌즈를 손으로 쥐고 움직이는 것처럼, 움직이는 방향으로 기울어진다.
+      const vx = (lensPos.x - prevPos.x) / Math.max(dt, 0.001);
+      const vy = (lensPos.y - prevPos.y) / Math.max(dt, 0.001);
+      tiltYaw += (THREE.MathUtils.clamp(vx * 0.06, -MAX_TILT, MAX_TILT) - tiltYaw) * 0.15;
+      tiltPitch += (THREE.MathUtils.clamp(-vy * 0.06, -MAX_TILT, MAX_TILT) - tiltPitch) * 0.15;
+      // 빛줄기의 축(초점 → 렌즈 방향). 렌즈 면은 이 축에 수직이라 빛줄기와 같은 각도로 보인다.
+      axis.copy(baseAxis).applyEuler(tiltEuler.set(tiltPitch, tiltYaw, 0));
+      lens.quaternion.setFromUnitVectors(forward, axis);
+      // 시작 연출: 옆으로 돌아 있던 렌즈가 제 각도로 돌아오며(좌우·앞뒤·평면 회전) 초점을 맞춘다.
+      lens.quaternion.multiply(
+        introQuat.setFromEuler(
+          introEuler.set((1 - intro) * 0.7, (1 - intro) * 1.0, (1 - intro) * 1.1),
+        ),
+      );
+
+      // 초점: 렌즈에서 빛줄기 축 반대 방향으로 일정 거리 떨어진 점.
+      focus.copy(lensPos).addScaledVector(axis, -FOCUS_LENGTH);
       const distance = focus.distanceTo(center);
       const closeness = introDone && outroAt === null ? 1 - THREE.MathUtils.clamp(distance / FOCUS_RANGE, 0, 1) : 0;
 
