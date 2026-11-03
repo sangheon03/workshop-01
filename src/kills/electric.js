@@ -18,21 +18,14 @@ const PULSES = [
 const FLICKER_MS = 40;
 const ORIGIN = new THREE.Vector3();
 
-// 모기에 손가락이 닿았다고 보는 반경(월드 단위). 파리채 판정과 같다.
+// 모기를 클릭했다고 보는 반경(월드 단위). 파리채 판정과 같다.
 const TOUCH_RADIUS = 0.7;
-// 검지손가락으로 삿대질하는 손 모양 커서. 손가락 끝(32, 2)이 마우스 위치다.
-const FINGER_SVG = `
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-  <g fill="#f6cba5" stroke="#8a5a3b" stroke-width="2.5" stroke-linejoin="round">
-    <rect x="26" y="2" width="12" height="34" rx="6"/>
-    <rect x="14" y="30" width="38" height="30" rx="11"/>
-    <rect x="38" y="30" width="10" height="16" rx="5"/>
-    <rect x="46" y="34" width="8" height="14" rx="4"/>
-    <path d="M16 38 C6 36 4 46 12 50 L18 50 Z"/>
-  </g>
-  <path d="M30 14v14M34 14v14" stroke="#e8b38a" stroke-width="1.5" opacity=".6"/>
-</svg>`;
-const FINGER_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(FINGER_SVG)}") 32 2, pointer`;
+// 커서 대신 떠 있는 스파크는 모기보다 카메라 쪽으로 이만큼 앞에 뜬다 (깊이감).
+const CURSOR_FRONT = 1.2;
+const CURSOR_BOLTS = 7;
+const TRAIL_COUNT = 8;
+// 모기를 클릭하면 스파크가 이 시간(ms) 동안 아크를 그리며 모기로 옮겨간다.
+const TRANSFER_MS = 320;
 
 // 다 탄 뒤: 탄 모기 위로 회색 연기가 한 줄로 피어오른다.
 const SMOKE_START = 2400;
@@ -146,8 +139,8 @@ function activePulse(ms) {
   return PULSES.findIndex((p) => ms >= p.at && ms < p.at + p.length);
 }
 
-// 전기가 튀는 연출 본체. 손가락 끝(모기 기준 좌표)은 getFingerLocal()로 받는다.
-function shock(mosquito, getFingerLocal) {
+// 전기가 튀는 연출 본체. 전기가 들어가는 점(모기 기준 좌표)은 getEntryLocal()로 받는다.
+function shock(mosquito, getEntryLocal) {
   const { group } = mosquito;
   const { camera } = getScene();
 
@@ -174,9 +167,9 @@ function shock(mosquito, getFingerLocal) {
   const glowTexture = makeGlowTexture();
   const glowNear = makeGlow(glowTexture, 4);
   const glowFar = makeGlow(glowTexture, 9);
-  // 손가락 끝에서도 작게 번쩍인다.
-  const glowFinger = makeGlow(glowTexture, 1.8);
-  group.add(glowNear, glowFar, glowFinger);
+  // 전기가 들어가는 점에서도 작게 번쩍인다.
+  const glowEntry = makeGlow(glowTexture, 1.8);
+  group.add(glowNear, glowFar, glowEntry);
 
   const smoke = makeSmoke();
   group.add(...smoke);
@@ -213,7 +206,7 @@ function shock(mosquito, getFingerLocal) {
       overlay.style.opacity = '0';
       glowNear.material.opacity = 0;
       glowFar.material.opacity = 0;
-      glowFinger.material.opacity = 0;
+      glowEntry.material.opacity = 0;
       bolts.forEach((b) => {
         b.visible = false;
       });
@@ -240,16 +233,16 @@ function shock(mosquito, getFingerLocal) {
           glowFar.material.opacity = on ? (0.25 + 0.45 * power) * Math.random() : 0;
           glowNear.scale.setScalar(3.5 + power * 2.5 * Math.random());
           glowFar.scale.setScalar(8 + power * 5 * Math.random());
-          // 3줄 중 1줄은 손가락 끝에서 짧게 튀고, 나머지는 모기에서 뻗는다.
-          const finger = getFingerLocal();
-          glowFinger.position.copy(finger);
-          glowFinger.material.opacity = on ? 0.8 + 0.2 * Math.random() : 0.2;
+          // 3줄 중 1줄은 전기가 들어간 점에서 짧게 튀고, 나머지는 모기에서 뻗는다.
+          const entryPoint = getEntryLocal();
+          glowEntry.position.copy(entryPoint);
+          glowEntry.material.opacity = on ? 0.8 + 0.2 * Math.random() : 0.2;
           bolts.forEach((b, i) => {
             b.visible = Math.random() < 0.7 + power * 0.3;
             if (!b.visible) return;
-            const fromFinger = i % 3 === 0;
-            b.position.copy(fromFinger ? finger : ORIGIN);
-            redrawBolt(b, fromFinger ? power * 0.55 : power);
+            const fromEntry = i % 3 === 0;
+            b.position.copy(fromEntry ? entryPoint : ORIGIN);
+            redrawBolt(b, fromEntry ? power * 0.55 : power);
           });
         }
         // 경련: 펄스가 셀수록 크게 떤다.
@@ -302,10 +295,10 @@ function shock(mosquito, getFingerLocal) {
       group.position.copy(origin);
       group.rotation.z = originRotZ;
       setDarkness(0.97);
-      group.remove(flash, glowNear, glowFar, glowFinger, ...bolts, ...smoke);
+      group.remove(flash, glowNear, glowFar, glowEntry, ...bolts, ...smoke);
       overlay.remove();
       glowTexture.dispose();
-      [glowNear, glowFar, glowFinger].forEach((g) => g.material.dispose());
+      [glowNear, glowFar, glowEntry].forEach((g) => g.material.dispose());
       bolts.forEach((b) => {
         b.children[0].geometry.dispose();
         b.children.forEach((line) => line.material.dispose());
@@ -320,27 +313,78 @@ function shock(mosquito, getFingerLocal) {
   });
 }
 
-// 손가락 커서를 모기에 가져다 대면 전기충격이 일어난다.
+// 두 점 사이에 지직거리는 아크를 그린다. amount는 옆으로 흔들리는 정도(월드 단위).
+function drawArc(line, from, to, amount) {
+  const positions = line.geometry.attributes.position;
+  const last = positions.count - 1;
+  for (let i = 0; i <= last; i++) {
+    const k = i / last;
+    const wobble = i === 0 || i === last ? 0 : amount * Math.sin(k * Math.PI);
+    positions.setXYZ(
+      i,
+      from.x + (to.x - from.x) * k + (Math.random() - 0.5) * wobble,
+      from.y + (to.y - from.y) * k + (Math.random() - 0.5) * wobble,
+      from.z + (to.z - from.z) * k + (Math.random() - 0.5) * wobble,
+    );
+  }
+  positions.needsUpdate = true;
+}
+
+const easeIn = (x) => x * x * (3 - 2 * x);
+
+// 전기충격을 고르면 커서에 작은 스파크가 계속 떠 있고, 모기를 클릭하면 전기가 모기로 옮겨가서 충격이 시작된다.
 export function playElectric(mosquito) {
   const { group } = mosquito;
+  const world = group.parent;
   const { camera } = getScene();
   const canvas = document.getElementById('game-canvas');
 
+  const center = group.position.clone();
+  const sphere = new THREE.Sphere(center, TOUCH_RADIUS);
+  // 스파크는 모기 앞쪽 평면 위에서 움직이고, 클릭한 점은 모기가 있는 깊이의 평면 위에 찍는다.
+  const sparkPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -(center.z + CURSOR_FRONT));
+  const contactPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -center.z);
   const raycaster = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
-  const sphere = new THREE.Sphere(group.position.clone(), TOUCH_RADIUS);
-  // 손가락 끝이 가리키는 곳을 모기가 있는 깊이의 평면 위 월드 좌표로 바꾼다.
-  const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -group.position.z);
-  const tip = group.position.clone();
-  const fingerLocal = new THREE.Vector3();
-  let started = false;
+  const hit = new THREE.Vector3();
 
+  const target = center.clone().add(new THREE.Vector3(0, 1.6, CURSOR_FRONT));
+  const sparkPos = target.clone();
+  const entry = center.clone();
+  let hovering = false;
+
+  // 마우스 위치에서 카메라 광선을 쏜다.
   const aim = (event) => {
     ndc.set((event.clientX / window.innerWidth) * 2 - 1, -(event.clientY / window.innerHeight) * 2 + 1);
     raycaster.setFromCamera(ndc, camera);
-    raycaster.ray.intersectPlane(plane, tip);
-    return raycaster.ray.intersectsSphere(sphere);
   };
+
+  // 커서 스파크: 빛 알갱이 + 짧게 튀는 번개 + 꼬리(혜성처럼 따라오는 빛).
+  const texture = makeGlowTexture();
+  const spark = new THREE.Group();
+  const core = makeGlow(texture, 0.7);
+  const halo = makeGlow(texture, 1.6);
+  const light = new THREE.PointLight(0xffe680, 6, 6);
+  const mini = Array.from({ length: CURSOR_BOLTS }, makeBolt);
+  mini.forEach((b) => {
+    b.scale.setScalar(0.1);
+    spark.add(b);
+  });
+  spark.add(core, halo, light);
+  const trail = Array.from({ length: TRAIL_COUNT }, (_, i) => {
+    const dot = makeGlow(texture, 0.55 * (1 - i / (TRAIL_COUNT + 1)));
+    dot.material.opacity = 0.6 * (1 - i / TRAIL_COUNT);
+    dot.position.copy(sparkPos);
+    return dot;
+  });
+  // 모기로 옮겨갈 때 쓰는 아크 (14개 점을 잇는 번개 선).
+  const arc = makeBolt();
+  arc.children.forEach((line) => {
+    line.geometry = new THREE.BufferGeometry();
+    line.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(14 * 3), 3));
+  });
+  arc.visible = false;
+  world.add(spark, arc, ...trail);
 
   const hint = document.createElement('p');
   hint.className = 'hint';
@@ -352,24 +396,110 @@ export function playElectric(mosquito) {
     pointerEvents: 'none',
     zIndex: '5',
   });
-  hint.textContent = '손가락을 모기에 가져다 대세요!';
+  hint.textContent = '스파크를 모기에 대고 클릭해서 전기를 옮기세요!';
   document.body.appendChild(hint);
   const previousCursor = canvas.style.cursor;
-  canvas.style.cursor = FINGER_CURSOR;
+  canvas.style.cursor = 'none';
+
+  let transferStart = null;
+  let transferFrom = null;
+  let lastBolt = -Infinity;
+
+  const onMove = (event) => {
+    if (transferStart !== null) return;
+    aim(event);
+    if (raycaster.ray.intersectPlane(sparkPlane, hit)) target.copy(hit);
+    // 모기 위에 올라가면 스파크가 더 거세게 튄다.
+    hovering = raycaster.ray.intersectsSphere(sphere);
+  };
+  const onClick = (event) => {
+    if (transferStart !== null) return;
+    aim(event);
+    if (!raycaster.ray.intersectsSphere(sphere)) return;
+    // 모기를 눌렀다: 클릭한 점으로 전기가 옮겨간다.
+    if (raycaster.ray.intersectPlane(contactPlane, hit)) entry.copy(hit);
+    transferFrom = sparkPos.clone();
+    transferStart = performance.now();
+    hint.remove();
+  };
+  window.addEventListener('pointermove', onMove);
+  canvas.addEventListener('click', onClick);
+
+  const cleanup = () => {
+    window.removeEventListener('pointermove', onMove);
+    canvas.removeEventListener('click', onClick);
+    hint.remove();
+    world.remove(spark, arc, ...trail);
+    texture.dispose();
+    [core, halo, ...trail].forEach((o) => o.material.dispose());
+    mini.forEach((b) => {
+      b.children[0].geometry.dispose();
+      b.children.forEach((line) => line.material.dispose());
+    });
+    arc.children.forEach((line) => {
+      line.geometry.dispose();
+      line.material.dispose();
+    });
+    light.dispose?.();
+  };
 
   return new Promise((resolve) => {
-    // 손가락 끝은 연출 중에도 계속 따라간다. 처음 닿는 순간 전기충격을 시작한다.
-    const onMove = (event) => {
-      const touching = aim(event);
-      if (started || !touching) return;
-      started = true;
-      hint.remove();
-      shock(mosquito, () => fingerLocal.copy(tip).sub(sphere.center)).then(() => {
-        window.removeEventListener('pointermove', onMove);
-        canvas.style.cursor = previousCursor;
-        resolve();
-      });
+    const ball = new THREE.Vector3();
+    const tick = (now) => {
+      const t = now / 1000;
+
+      if (transferStart === null) {
+        // 커서를 부드럽게 따라가면서 깊이 방향으로도 살짝 일렁인다.
+        sparkPos.lerp(target, 0.3);
+        ball.set(
+          sparkPos.x + Math.cos(t * 9) * 0.04,
+          sparkPos.y + Math.sin(t * 11) * 0.04,
+          sparkPos.z + Math.sin(t * 4) * 0.15,
+        );
+      } else {
+        // 아크를 그리며 스파크가 모기 쪽으로 날아간다.
+        const k = easeIn(Math.min((now - transferStart) / TRANSFER_MS, 1));
+        ball.lerpVectors(transferFrom, entry, k);
+        arc.visible = true;
+        arc.children.forEach((line) => drawArc(line, transferFrom, ball, 0.5));
+      }
+
+      spark.position.copy(ball);
+      const power = hovering || transferStart !== null ? 1 : 0.45;
+      core.material.opacity = 0.85 + 0.15 * Math.random();
+      halo.material.opacity = (0.4 + 0.3 * Math.random()) * (0.6 + power * 0.6);
+      halo.scale.setScalar(1.3 + power * 0.9 + Math.random() * 0.3);
+      light.intensity = 4 + power * 10 * Math.random();
+      if (now - lastBolt > 55) {
+        lastBolt = now;
+        mini.forEach((b) => {
+          b.visible = Math.random() < 0.35 + power * 0.5;
+          if (b.visible) {
+            redrawBolt(b, power);
+            b.scale.setScalar(0.07 + power * 0.07);
+          }
+        });
+      }
+
+      // 꼬리: 앞의 점을 뒤따라오며 3D 공간에 곡선을 그린다.
+      let prev = ball;
+      for (const dot of trail) {
+        dot.position.lerp(prev, 0.4);
+        prev = dot.position;
+      }
+
+      if (transferStart !== null && now - transferStart >= TRANSFER_MS) {
+        cleanup();
+        // 전기가 들어간 점에서 번개가 튀도록 모기 기준 좌표로 넘긴다.
+        const entryLocal = entry.clone().sub(center);
+        shock(mosquito, () => entryLocal).then(() => {
+          canvas.style.cursor = previousCursor;
+          resolve();
+        });
+        return;
+      }
+      requestAnimationFrame(tick);
     };
-    window.addEventListener('pointermove', onMove);
+    requestAnimationFrame(tick);
   });
 }
