@@ -113,8 +113,8 @@ body {
 }
 
 #result-mosquito {
-  max-width: min(60vw, 360px);
-  max-height: 32vh;
+  max-width: min(70vw, 420px);
+  max-height: 34vh;
   object-fit: contain;
   filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.45));
 }
