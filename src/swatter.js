@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import { getScene } from './scene.js';
 import { SWATTER, followCursor, playClickMotion } from './cursors.js';
 
-const HIT_RADIUS = 0.7;
+// 터치 화면(손가락)은 마우스보다 부정확해서 판정 반경을 키운다.
+const COARSE = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+const HIT_RADIUS = 0.7 * (COARSE ? 1.6 : 1);
 const SWING_MS = 220;
 
 const raycaster = new THREE.Raycaster();

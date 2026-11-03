@@ -3,7 +3,9 @@ import { getScene } from '../scene.js';
 import { TWEEZERS, playClickMotion } from '../cursors.js';
 
 // 클릭 위치에서 부위 화면 좌표까지 이 거리(px) 안이면 그 부위를 누른 것으로 본다.
-const PICK_RADIUS = 70;
+// 터치 화면(손가락)은 마우스보다 부정확해서 집는 반경을 키운다.
+const COARSE = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+const PICK_RADIUS = 70 * (COARSE ? 1.5 : 1);
 const FALL_MS = 1100;
 const SHRINK_START = 0.6;
 const GRAVITY = -7;

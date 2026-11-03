@@ -29,7 +29,9 @@ const PULSES = [
 const ORIGIN = new THREE.Vector3();
 
 // 모기를 클릭했다고 보는 반경(월드 단위). 파리채 판정과 같다.
-const TOUCH_RADIUS = 0.7;
+// 터치 화면(손가락)은 마우스보다 부정확해서 모기를 누르는 판정 반경을 키운다.
+const COARSE = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+const TOUCH_RADIUS = 0.7 * (COARSE ? 1.6 : 1);
 // 커서 대신 떠 있는 스파크는 모기보다 카메라 쪽으로 이만큼 앞에 뜬다 (깊이감).
 const CURSOR_FRONT = 1.2;
 const CURSOR_BOLTS = 7;
@@ -460,10 +462,12 @@ export function playElectric(candidates, { signal, onCommit } = {}) {
     onCommit?.(picked.mosquito);
   };
   window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerdown', onMove); // 터치는 대기만 하면 pointermove가 오지 않으므로 닿는 순간에도 스파크를 옮긴다
   canvas.addEventListener('click', onClick);
 
   const cleanup = () => {
     window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerdown', onMove);
     canvas.removeEventListener('click', onClick);
     hint.remove();
     world.remove(spark, arc, ...trail);
