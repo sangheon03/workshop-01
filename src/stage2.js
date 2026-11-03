@@ -22,27 +22,55 @@ function stopIdleLoop() {
   }
 }
 
-// 모기를 화면 가운데로 옮긴다. 움찔거림은 mosquito.setTwitch가 맡고,
+// 잡은 모기들이 서 있을 자리. 3마리까지는 한 줄, 그보다 많으면 위아래 두 줄로 가운데에 모은다.
+const SLOT_SPACING_X = 2.4;
+const SLOT_SPACING_Y = 2.2;
+function slotPositions(count) {
+  if (count <= 3) {
+    return Array.from({ length: count }, (_, i) => new THREE.Vector3((i - (count - 1) / 2) * SLOT_SPACING_X, 0, 0));
+  }
+  const top = Math.ceil(count / 2);
+  const rows = [top, count - top];
+  const slots = [];
+  rows.forEach((n, row) => {
+    for (let i = 0; i < n; i++) {
+      slots.push(new THREE.Vector3((i - (n - 1) / 2) * SLOT_SPACING_X, row === 0 ? SLOT_SPACING_Y / 2 : -SLOT_SPACING_Y / 2, 0));
+    }
+  });
+  return slots;
+}
+
+// 모기들을 각자의 자리로 옮긴다. 움찔거림은 mosquito.setTwitch가 맡고,
 // 없을 때(구현 전)만 예전처럼 날개를 떤다.
-function startIdleLoop(mosquito) {
-  const { group, parts } = mosquito;
-  const center = new THREE.Vector3(0, 0, 0);
+function startIdleLoop(mosquitoes, slots) {
   const start = performance.now();
-  const useWingFallback = typeof mosquito.setTwitch !== 'function';
 
   const tick = (now) => {
-    group.position.lerp(center, 0.08);
-    if (useWingFallback) {
-      const tremble = Math.sin(((now - start) / 1000) * 8) * 0.15;
-      parts.wingL.rotation.z = tremble;
-      parts.wingR.rotation.z = -tremble;
-    }
+    mosquitoes.forEach(({ group, parts, setTwitch }, i) => {
+      group.position.lerp(slots[i], 0.08);
+      if (typeof setTwitch !== 'function') {
+        const tremble = Math.sin(((now - start) / 1000) * 8) * 0.15;
+        parts.wingL.rotation.z = tremble;
+        parts.wingR.rotation.z = -tremble;
+      }
+    });
     frameId = requestAnimationFrame(tick);
   };
   frameId = requestAnimationFrame(tick);
 }
 
-function createHpBar(container) {
+// 처치 연출을 모든 모기에게 적용한다.
+// 연출이 여러 마리를 한꺼번에 받을 수 있으면(`play.multi`가 true) 배열째로 한 번에 부르고,
+// 아직 한 마리만 받는 연출이면 모기마다 차례로 적용한다. (모두 한꺼번에 하는 연출은 #60~#62에서 `multi`로 바뀐다.)
+async function playOnAll(method, mosquitoes) {
+  if (method.play.multi) {
+    await method.play(mosquitoes);
+    return;
+  }
+  for (const mosquito of mosquitoes) await method.play(mosquito);
+}
+
+function createHpBar(container, count) {
   const wrap = document.createElement('div');
   wrap.id = 'stage2-hp';
   wrap.style.cssText =
@@ -61,7 +89,7 @@ function createHpBar(container) {
   container.appendChild(wrap);
 
   const set = (hp) => {
-    label.textContent = `모기 HP ${hp} / ${MAX_HP}`;
+    label.textContent = `${count > 1 ? `모기 ${count}마리 ` : '모기 '}HP ${hp} / ${MAX_HP}`;
     fill.style.width = `${(hp / MAX_HP) * 100}%`;
   };
   set(MAX_HP);
@@ -95,7 +123,10 @@ function createButtons(container, onPick) {
   return { el: bar, refresh };
 }
 
-export function startStage2(mosquito, { onDone }) {
+// mosquitoes: 잡은 모기 배열. 모기 한 마리 객체도 받아 준다. 모든 모기가 HP 하나를 공유한다.
+export function startStage2(mosquitoes, { onDone }) {
+  const list = [].concat(mosquitoes).filter(Boolean);
+  const slots = slotPositions(list.length);
   const container = document.getElementById('screen-stage2');
   container.querySelector('#stage2-buttons')?.remove();
   container.querySelector('#stage2-hp')?.remove();
@@ -106,18 +137,19 @@ export function startStage2(mosquito, { onDone }) {
   let busy = false;
 
   // 잡히면 움찔거리기 시작한다. 죽은 뒤에도 계속 유지된다.
-  mosquito.setTwitch?.(1);
-  startIdleLoop(mosquito);
+  list.forEach((m) => m.setTwitch?.(1));
+  startIdleLoop(list, slots);
 
-  const hpBar = createHpBar(container);
+  const hpBar = createHpBar(container, list.length);
   const buttons = createButtons(container, async (method) => {
     if (busy || used.includes(method.id)) return;
     busy = true;
     buttons.refresh({ busy, used });
-    // 첫 연출부터는 모기를 가운데로 옮기는 동작을 멈춘다 (연출이 위치를 직접 다룬다).
+    // 첫 연출부터는 자리로 옮기는 동작을 멈춘다 (연출이 위치를 직접 다룬다). 아직 이동 중이면 자리로 바로 옮겨 둔다.
     stopIdleLoop();
+    list.forEach((m, i) => m.group.position.copy(slots[i]));
 
-    await method.play(mosquito);
+    await playOnAll(method, list);
 
     used.push(method.id);
     hp = Math.max(0, hp - method.damage);
