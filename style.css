@@ -117,11 +117,50 @@ body {
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
 }
 
-#result-mosquito {
-  max-width: min(70vw, 420px);
-  max-height: 34vh;
+/* 결과 화면: 죽은 모기 이미지를 나란히. 마릿수가 많으면 줄을 바꾼다. */
+#result-mosquitoes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px 16px;
+  max-width: min(92vw, 900px);
+}
+
+#result-mosquitoes img {
+  max-width: min(28vw, 300px);
+  max-height: 22vh;
   object-fit: contain;
   filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.45));
+}
+
+/* 1단계 아래쪽: 잡은 모기 수와 고문 시작 버튼 */
+#catch-hud {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 28px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  pointer-events: none;
+  font-size: 1.1rem;
+}
+
+#catch-hud span {
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+button:disabled:hover {
+  background: #ffcf40;
 }
 
 h1 {
