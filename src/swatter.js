@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { getScene } from './scene.js';
-import { SWATTER, playClickMotion } from './cursors.js';
+import { SWATTER, followCursor, playClickMotion } from './cursors.js';
 
 const HIT_RADIUS = 0.7;
 const SWING_MS = 220;
@@ -13,12 +13,13 @@ let canvas = null;
 let target = null;
 let getTargets = null;
 let onCaught = null;
+let stopFollow = null;
 
 // 클릭 위치에서 파리채를 휘두르는 모션을 잠깐 보여준다 (맞든 빗나가든 같다).
 // 그물 한가운데(클릭 지점)를 중심으로 크게 내리쳤다가 돌아오는 느낌으로 보이게 한다.
 function playSwing(x, y) {
   playClickMotion(SWATTER, x, y, {
-    scale: 1.4,
+    scale: 1.1,
     ms: SWING_MS,
     frames: [
       { transform: 'rotate(-35deg) scale(1.25)', opacity: 1 },
@@ -64,6 +65,7 @@ export function enableSwatter({ targets = null, mosquito = null, onCaught: callb
   getTargets = targets;
   onCaught = callback;
   canvas.style.cursor = SWATTER.cursor;
+  stopFollow = followCursor(SWATTER);
   canvas.addEventListener('click', onClick);
 }
 
@@ -71,6 +73,8 @@ export function disableSwatter() {
   if (!canvas) return;
   canvas.removeEventListener('click', onClick);
   canvas.style.cursor = '';
+  stopFollow?.();
+  stopFollow = null;
   canvas = null;
   target = null;
   getTargets = null;
