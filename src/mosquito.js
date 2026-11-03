@@ -106,17 +106,23 @@ export function createMosquito() {
 }
 
 // 잡힌 모기의 움찔거림. level 0은 멈춤, 1은 기본, 클수록 격하게 떤다. 바꾸기 전까지 계속 유지된다.
+// 기본(1)은 대부분 가만히 있다가 가끔 짧게 움찔하는 정도다. 세기가 오를수록 움찔이 더 잦고 세지며,
+// 1을 넘는 만큼만 약한 잔떨림이 얹혀서 부들부들 떤다. (예전에는 22Hz 이상으로 쉬지 않고 흔들어서 너무 과했다.)
+// 세기를 올리면 곧바로 한 번 움찔한다. 신체를 뜯을 때마다 반응이 보이게 하려는 것이다.
 // 매 프레임 "지난 프레임에 더한 흔들림"을 먼저 빼고 새 흔들림을 더하는 방식이라,
 // 다른 코드가 위치·날개를 옮겨도 모기가 밀려나지 않고 원래 자리를 기준으로 흔들린다.
 // 모기가 장면에서 빠지면(resetGame 등) 스스로 멈춘다. 부위가 없거나 떨어져 나가도 에러 없이 건너뛴다.
+const TWITCH_ROT = 0.28; // 움찔할 때 날개·다리가 튕기는 각도(라디안)
 function createTwitch(mosquito) {
   const { group } = mosquito;
   const shake = new THREE.Vector3();
   const lastShake = new THREE.Vector3();
   const lastRot = new Map(); // 부위 -> 지난 프레임에 더한 회전(z)
+  const seed = Math.random() * 100;
   let level = 0;
   let frameId = null;
-  let seed = Math.random() * 100;
+  let nextAt = 0; // 다음 움찔 시각
+  let burst = null; // 지금 진행 중인 움찔 { start, ms, dir, strength, flick }
 
   const rotating = () => {
     const { parts } = mosquito;
@@ -143,24 +149,53 @@ function createTwitch(mosquito) {
     }
     frameId = requestAnimationFrame(tick);
     const t = now / 1000 + seed;
-    const power = Math.min(level, 10);
-    const amp = 0.015 * power;
-    const hz = 18 + 4 * power;
-    shake.set(
-      Math.sin(t * hz * 6.28) * amp,
-      Math.sin(t * hz * 5.1 + 1) * amp,
-      Math.sin(t * hz * 4.3 + 2) * amp * 0.5,
-    );
-    apply(shake, (part) => Math.sin(t * hz * 7 + part.id) * 0.08 * power);
+    // strong: 기본(1)은 0, 5.5 근처에서 1. 움찔의 세기·빈도와 잔떨림이 이 값을 따른다.
+    const strong = THREE.MathUtils.clamp((Math.min(level, 8) - 1) / 4.5, 0, 1.5);
+
+    // 움찔: 짧게 한 번 튕겼다가 돌아온다. 사이사이는 거의 가만히 있는다.
+    if (!burst && now >= nextAt) {
+      burst = {
+        start: now,
+        ms: 130 + Math.random() * 70,
+        dir: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.3, (Math.random() - 0.5) * 0.4).normalize(),
+        strength: (0.055 + 0.075 * Math.min(strong, 1)) * (0.7 + Math.random() * 0.6),
+        flick: Math.random() < 0.5 ? -1 : 1,
+      };
+    }
+    let env = 0;
+    if (burst) {
+      const u = (now - burst.start) / burst.ms;
+      if (u >= 1) {
+        const gap = THREE.MathUtils.lerp(1500, 380, Math.min(strong, 1));
+        nextAt = now + gap * (0.6 + Math.random() * 0.8);
+        burst = null;
+      } else {
+        env = Math.sin(Math.PI * u);
+      }
+    }
+
+    // 잔떨림: 기본에서는 없고, 세기가 1을 넘는 만큼만 느리고 작게 더해진다.
+    const tremor = 0.012 * strong;
+    shake.set(Math.sin(t * Math.PI * 18) * tremor, Math.sin(t * Math.PI * 22 + 1) * tremor, 0);
+    if (burst) shake.addScaledVector(burst.dir, burst.strength * env);
+    apply(shake, (part) => {
+      const side = part.id % 2 ? 1 : -1; // 부위마다 튕기는 방향이 엇갈리게
+      const flick = burst ? env * TWITCH_ROT * burst.flick * side : 0;
+      return flick + Math.sin(t * Math.PI * 16 + part.id) * 0.04 * strong;
+    });
   }
 
   return function setTwitch(next) {
+    const before = level;
     level = Math.max(0, Number(next) || 0);
     if (level > 0) {
+      // 세기가 오르면(예: 신체를 하나 뜯었을 때) 기다리지 않고 바로 움찔한다. 처음 켤 때는 살짝 뒤에 첫 움찔.
+      if (level > before) nextAt = before === 0 ? performance.now() + 250 : 0;
       if (frameId === null) frameId = requestAnimationFrame(tick);
     } else {
       if (frameId !== null) cancelAnimationFrame(frameId);
       frameId = null;
+      burst = null;
       apply(shake.set(0, 0, 0), () => 0);
     }
   };
